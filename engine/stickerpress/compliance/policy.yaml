@@ -1,0 +1,265 @@
+# =============================================================================
+# StickerPress 内容合规策略  |  policy_version: 2026.09-r3
+# -----------------------------------------------------------------------------
+# 这份文件是风控运营的"唯一真源"（single source of truth）。
+# 调整阈值 / 增删类目 / 改处置动作，都只改这里，不改代码。
+# 每次修改必须递增 policy_version，pipeline 会把版本号写进审计日志与成品页脚，
+# 保证任何一张已印出的实体贴纸都能回溯到当时生效的策略。
+#
+# 处置动作 action：
+#   block     直接拦截，不进入生成，返回明确拒绝理由
+#   review    转人工复核（进审核队列），默认不阻断下游但不允许下单印刷
+#   mitigate  自动处置后放行（擦除 / 脱敏 / 降级），并记录处置手段
+#   pass      放行
+#
+# 严重度 severity：S0 最高（法律红线）→ S3 最低（体验瑕疵）
+# =============================================================================
+
+policy_version: "2026.09-r3"
+updated_at: "2026-09-10"
+owner: "内容风控质量"
+
+# -----------------------------------------------------------------------------
+# 闸门开关：三道闸可独立启停，便于灰度与压测
+# -----------------------------------------------------------------------------
+gates:
+  ingest:      { enabled: true,  vlm_review: true  }   # 闸1 入料
+  generation:  { enabled: true,  vlm_review: false }   # 闸2 生成
+  egress:      { enabled: true,  vlm_review: true  }   # 闸3 出料
+
+# 人工复核队列的兜底策略：VLM 不可用时如何处理
+fail_mode: "review"   # review = 降级转人工（保守）；pass = 放行（激进）
+
+# -----------------------------------------------------------------------------
+# 风险类目
+# -----------------------------------------------------------------------------
+categories:
+
+  # ===== A. 肖像与主体 ========================================================
+  - code: A1
+    key: minor_portrait
+    name: 未成年人肖像
+    group: 肖像
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+    rationale: >-
+      实体贴纸会脱离平台流转、可被二次传播且无法召回。未成年人肖像商品化在
+      《未成年人保护法》《个人信息保护法》下需监护人单独同意，产品侧不具备
+      核验能力，因此在 C 端自助链路一律拦截。
+    remediation: 走 B 端定制通道，上传监护人授权书后由人工开单。
+
+  - code: A2
+    key: third_party_portrait
+    name: 非本人／多人肖像
+    group: 肖像
+    severity: S1
+    action: review
+    gates: [ingest]
+    rationale: 肖像权需被拍摄者授权；多人合影无法自动判定授权范围。
+    judging_note: >-
+      只有当画面中出现**真实人类面孔**时才命中。宠物、玩偶、卡通形象、
+      雕塑、无脸的背影一律不命中。单人自拍也应命中（无法确认是否本人），
+      但严重度低于多人合影。
+    remediation: 下单前需勾选肖像授权承诺书，并留存承诺记录。
+
+  - code: A3
+    key: public_figure
+    name: 公众人物／名人
+    group: 肖像
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+    rationale: 名人肖像商业化涉及肖像权+商品化权，且极易引发舆情。
+
+  # ===== B. 知识产权 ==========================================================
+  - code: B1
+    key: known_character
+    name: 知名 IP 角色
+    group: 知识产权
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+    rationale: >-
+      动漫／游戏／影视角色的形象著作权明确，"AI 二创 + 实体售卖"是侵权高发场景，
+      且权利人维权成本低、批量取证容易。出料侧同样要查，防止模型自发漂移出 IP 特征。
+
+  - code: B2
+    key: trademark_logo
+    name: 商标／品牌 Logo
+    group: 知识产权
+    severity: S1
+    action: mitigate
+    mitigation: erase_and_regenerate
+    gates: [ingest, egress]
+    rationale: 照片里偶然入镜的品牌 Logo 可自动擦除后继续生成，不必直接拒单。
+    judging_note: >-
+      需能明确指认出是哪个品牌才命中；泛化的图形、无字样的几何标记不算。
+
+  - code: B3
+    key: artwork_replica
+    name: 他人美术作品复制
+    group: 知识产权
+    severity: S2
+    action: review
+    gates: [ingest]
+
+  # ===== C. 违禁内容 ==========================================================
+  - code: C1
+    key: sexual
+    name: 色情低俗
+    group: 违禁
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+
+  - code: C2
+    key: violence_gore
+    name: 血腥暴力
+    group: 违禁
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+
+  - code: C3
+    key: political_symbol
+    name: 政治敏感／国家象征
+    group: 违禁
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+    rationale: >-
+      含国旗、国徽、领导人形象、国界地图的实体印刷品受专门法规约束
+      （《国旗法》《地图管理条例》等），地图问题在印刷品上属于零容忍项。
+
+  - code: C4
+    key: hate_discrimination
+    name: 歧视／仇恨符号
+    group: 违禁
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+
+  - code: C5
+    key: contraband
+    name: 毒品／武器／赌博
+    group: 违禁
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+
+  - code: C6
+    key: self_harm
+    name: 自残／极端行为
+    group: 违禁
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+
+  # ===== D. 隐私与凭证 ========================================================
+  - code: D1
+    key: identity_document
+    name: 证件／银行卡／车牌
+    group: 隐私
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+    rationale: 证件号、卡号、车牌一旦被印上实体贴纸即为不可撤回的信息泄露。
+
+  - code: D2
+    key: machine_readable_code
+    name: 二维码／条码
+    group: 隐私
+    severity: S1
+    action: block
+    gates: [egress]
+    rationale: >-
+      实体贴纸上的二维码是不可控的跳转载体，可被用于诈骗投放；
+      即使原图无害，也不允许成品携带任何机读码。
+
+  - code: D3
+    key: exif_geolocation
+    name: EXIF 地理位置／设备信息
+    group: 隐私
+    severity: S2
+    action: mitigate
+    mitigation: strip_exif
+    gates: [ingest]
+    rationale: 上传即自动剥离，属默认脱敏项，不打扰用户。
+
+  # ===== E. 实体印刷品特有 ====================================================
+  - code: E1
+    key: text_on_sticker
+    name: 贴纸上出现文字
+    group: 印刷
+    severity: S2
+    action: review
+    gates: [egress]
+    rationale: >-
+      双重风险：一是生成模型的文字拼写错误会直接变成印刷废品（不可返工），
+      二是文案本身可能越过广告法/敏感词。默认策略是"贴纸不带可读文案"。
+    judging_note: >-
+      只统计**可读文案**：单词、短语、句子、品牌字样、网址、数字串。
+      纯装饰性的拟声符号与标点不算命中，例如 Zzz、!、?、♪、★、❤、
+      以及漫画气泡里的效果线。判定时以"印错了会不会变成废品/引发纠纷"为准。
+
+  - code: E2
+    key: currency_imagery
+    name: 货币图样
+    group: 印刷
+    severity: S0
+    action: block
+    gates: [ingest, egress]
+    rationale: 《人民币图样使用管理办法》对实体印刷有明确许可要求，属硬红线。
+
+  - code: E3
+    key: medical_claim
+    name: 功效／医疗宣称
+    group: 印刷
+    severity: S1
+    action: block
+    gates: [generation, egress]
+
+# -----------------------------------------------------------------------------
+# 生成侧的提示词硬约束（闸2）：拼进每一次生成请求，防止模型自发越界
+# -----------------------------------------------------------------------------
+generation_guardrails:
+  positive:
+    - "original character design derived only from the uploaded reference photo"
+    - "generic, non-branded, non-trademarked appearance"
+    - "wholesome and family-friendly"
+  negative:
+    - "no brand logos, no trademarks, no product packaging"
+    - "no recognizable copyrighted cartoon, anime, game or movie characters"
+    - "no celebrities or public figures"
+    - "no text, no letters, no numbers, no watermark, no signature"
+    - "no QR codes, no barcodes"
+    - "no flags, no national emblems, no maps, no political symbols"
+    - "no currency, no banknotes, no coins"
+    - "no weapons, no blood, no gore, no drugs"
+    - "no nudity, no suggestive posing"
+    - "no religious symbols"
+
+# 用户自定义文案（贴纸主题/昵称）的关键词过滤表。生产环境应接入公司统一敏感词服务，
+# 这里内置一份最小可用兜底表，保证离线也有基础拦截能力。
+keyword_blocklist:
+  - 身份证
+  - 银行卡
+  - 二维码
+  - 国旗
+  - 国徽
+  - 人民币
+  - 处方
+  - 根治
+  - 特效药
+
+# -----------------------------------------------------------------------------
+# 质量红线（闸3，非合规但直接决定良品率）
+# -----------------------------------------------------------------------------
+quality_thresholds:
+  min_effective_dpi: 300          # 贴纸放到成品尺寸后的有效分辨率
+  min_sticker_area_ratio: 0.25    # 主体面积 / 格位面积，太小说明抠图失败
+  max_sticker_area_ratio: 0.98    # 太大说明贴边、会被裁
+  min_knife_gap_mm: 8.0           # 相邻刀版最小净距（对齐 AGENTS.md 0.3 印刷验收门槛）
+  min_alpha_components: 1         # 抠图后主体连通域数量下限
+  required_sticker_count: 6       # A5 版面必须集齐 6 张，缺一不排版

@@ -11,6 +11,39 @@ outputs/
 
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
 
-# 允许提交的项目文档和经脱敏、显式命名的示例可按需添加例外规则。
+# Node / 前端构建产物
+node_modules
+node_modules/
+console/dist/
+console/site_dist/
+console/site.meta
+.env
+.env.local
+*.log
 
+.DS_Store
+.idea/
+.vscode/
+
+# 进程崩溃转储（biome / node 崩溃时会在项目里落几百 MB 的 core）
+core
+core.*
+*.core
+
+# ---------------------------------------------------------------------------
+# 例外：仅限自制、脱敏、显式命名的示例素材。
+# 这两个目录禁止放入任何客户照片或含可识别人物 / 第三方 IP 的内容；
+# 客户文件一律走上面已忽略的 work/ 与 outputs/。
+# ---------------------------------------------------------------------------
+!assets/samples/**
+!console/config/public/demo/**
+!console/public/**
+
+# 但示例台纸只保留 assets/samples/ 一份真源：那份 SVG 内嵌 6 张 400 dpi 位图，
+# 十几 MB，再存一份副本会在 git 历史里压出等量死重量。
+# console 侧的副本由 `pnpm sync:samples` 在本地生成。
+console/config/public/demo/sticker_sheet_A5.svg

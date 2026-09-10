@@ -1,0 +1,309 @@
+"""离线单元测试：零依赖、不联网、不落交付目录。
+
+覆盖四类回归：
+  1. 原图字节与哈希保全
+  2. 权利声明的拦截（缺省即拒绝，是这个产品的法律底线）
+  3. 装配几何：6 枚、闭合刀线、净距、边距、自包含
+  4. 装配器与验证器对 spec 的解读一致
+"""
+
+import base64
+import io
+import json
+import struct
+import sys
+import tempfile
+import unittest
+import zlib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from sticker_forge import (  # noqa: E402
+    RightsError, assemble_sheet, copy_source, load_rights, load_source, verify_sheet,
+)
+from sticker_forge.imagesize import read_size  # noqa: E402
+from sticker_forge.rights import evaluate  # noqa: E402
+from sticker_forge.spec import CUT_STROKE_MM, SheetSpec  # noqa: E402
+
+
+def make_png(w: int, h: int) -> bytes:
+    """手搓一张 w×h 的 RGBA PNG。测试不引入 Pillow。"""
+    raw = b"".join(b"\x00" + b"\xff\x00\x00\xff" * w for _ in range(h))
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return (struct.pack(">I", len(data)) + tag + data
+                + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF))
+
+    return (b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw))
+            + chunk(b"IEND", b""))
+
+
+def make_jpeg(w: int, h: int) -> bytes:
+    """最小可解析的 JPEG 头（只需被尺寸解析器读懂）。"""
+    return (b"\xff\xd8\xff\xe0" + struct.pack(">H", 16) + b"JFIF\x00" + b"\x00" * 9
+            + b"\xff\xc0" + struct.pack(">H", 17) + b"\x08"
+            + struct.pack(">HH", h, w) + b"\x03" + b"\x00" * 9
+            + b"\xff\xd9")
+
+
+GOOD_RIGHTS = {
+    "declared_by": "测试客户",
+    "declared_at": "2026-09-10",
+    "owns_photo_copyright": "yes",
+    "commercial_use_granted": "yes",
+    "identifiable_people": "no",
+    "third_party_ip": "no",
+}
+
+
+class TestImageSize(unittest.TestCase):
+    def test_png(self):
+        self.assertEqual(read_size(make_png(120, 80)), ("png", 120, 80))
+
+    def test_jpeg(self):
+        self.assertEqual(read_size(make_jpeg(300, 200)), ("jpeg", 300, 200))
+
+    def test_rejects_garbage(self):
+        with self.assertRaises(ValueError):
+            read_size(b"definitely not an image")
+
+    def test_detects_lying_extension(self):
+        """扩展名写 .png、内容是 JPEG，必须被记为备注而不是静默通过。"""
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "photo.png"
+            p.write_bytes(make_jpeg(1200, 900))
+            src = load_source(p)
+            self.assertEqual(src.fmt, "jpeg")
+            self.assertTrue(any("扩展名" in n for n in src.notes), src.notes)
+
+
+class TestSource(unittest.TestCase):
+    def test_hash_and_byte_identical_copy(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            data = make_png(1200, 900)
+            photo = d / "holiday.png"
+            photo.write_bytes(data)
+
+            src = load_source(photo)
+            self.assertEqual(src.size_bytes, len(data))
+
+            out = d / "delivery"
+            copied = copy_source(src, out)
+            self.assertEqual(copied.name, "source-original.png")
+            self.assertEqual(copied.read_bytes(), data,
+                             "原图副本必须与输入逐字节一致")
+            self.assertEqual(load_source(copied).sha256, src.sha256)
+
+    def test_rejects_missing_and_empty(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(FileNotFoundError):
+                load_source(Path(d) / "nope.png")
+            empty = Path(d) / "empty.png"
+            empty.write_bytes(b"")
+            with self.assertRaises(ValueError):
+                load_source(empty)
+
+    def test_flags_low_resolution(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "tiny.png"
+            p.write_bytes(make_png(320, 240))
+            self.assertTrue(any("300dpi" in n or "短边" in n
+                                for n in load_source(p).notes))
+
+
+class TestRights(unittest.TestCase):
+    def test_complete_declaration_passes(self):
+        self.assertTrue(evaluate(GOOD_RIGHTS).ok)
+
+    def test_missing_field_blocks(self):
+        for key in ("owns_photo_copyright", "commercial_use_granted",
+                    "identifiable_people", "third_party_ip"):
+            raw = dict(GOOD_RIGHTS)
+            raw.pop(key)
+            r = evaluate(raw)
+            self.assertFalse(r.ok, f"{key} 缺失时必须拦截")
+            self.assertTrue(any(key in b for b in r.blockers))
+
+    def test_unknown_is_not_yes(self):
+        """'unknown' / '待确认' 绝不能被读成授权。"""
+        for word in ("unknown", "n/a", "待确认", "", "maybe", "?"):
+            raw = dict(GOOD_RIGHTS, commercial_use_granted=word)
+            self.assertFalse(evaluate(raw).ok, f"{word!r} 不应被当作已授权")
+
+    def test_people_without_release_blocks(self):
+        raw = dict(GOOD_RIGHTS, identifiable_people="yes")
+        r = evaluate(raw)
+        self.assertFalse(r.ok)
+        self.assertTrue(any("portrait_release" in b for b in r.blockers))
+
+        raw["portrait_release"] = "no"
+        self.assertFalse(evaluate(raw).ok)
+
+        raw["portrait_release"] = "yes"
+        r = evaluate(raw)
+        self.assertTrue(r.ok)
+        self.assertTrue(r.warnings, "依赖用户声明时必须留下警示")
+
+    def test_ip_without_license_blocks(self):
+        raw = dict(GOOD_RIGHTS, third_party_ip="yes")
+        self.assertFalse(evaluate(raw).ok)
+
+    def test_missing_declarer_blocks(self):
+        raw = dict(GOOD_RIGHTS)
+        raw["declared_by"] = ""
+        self.assertFalse(evaluate(raw).ok)
+
+    def test_missing_file_raises(self):
+        with self.assertRaises(RightsError):
+            load_rights(Path(tempfile.gettempdir()) / "no-such-rights.json")
+
+
+class TestAssemble(unittest.TestCase):
+    def _artworks(self, d: Path, n: int = 6, px: int = 900):
+        out = []
+        for i in range(1, n + 1):
+            p = d / f"sticker_{i:02d}.png"
+            p.write_bytes(make_png(px, px))
+            out.append(p)
+        return out
+
+    def test_requires_exactly_six(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            for n in (0, 5, 7):
+                with self.assertRaises(ValueError, msg=f"{n} 张应被拒绝"):
+                    assemble_sheet(self._artworks(Path(tempfile.mkdtemp()), n))
+
+    def test_geometry_and_layers(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            r = assemble_sheet(self._artworks(d), order_id="T-1",
+                               source_sha256="a" * 64)
+            spec = SheetSpec()
+
+            self.assertEqual(len(r.placements), 6)
+            self.assertGreaterEqual(r.min_knife_gap_mm, spec.min_knife_gap_mm)
+            self.assertGreaterEqual(r.min_margin_mm, spec.safe_margin_mm)
+            self.assertGreaterEqual(r.min_effective_dpi, 300)
+
+            svg = r.svg
+            self.assertIn(f'width="{spec.page_w_mm:g}mm"', svg)
+            self.assertIn(f'height="{spec.page_h_mm:g}mm"', svg)
+            self.assertIn('id="CutContour"', svg)
+            self.assertEqual(svg.count("<image "), 6)
+            self.assertEqual(svg.count("<path id=\"cut-"), 6)
+            self.assertIn(f'stroke-width="{CUT_STROKE_MM}"', svg)
+
+    def test_cutlines_are_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = assemble_sheet(self._artworks(Path(d)))
+            import re
+            ds = re.findall(r'<path id="cut-\d+" d="([^"]+)"', r.svg)
+            self.assertEqual(len(ds), 6)
+            for d_attr in ds:
+                self.assertTrue(d_attr.strip().endswith("Z"),
+                                "每条刀线都必须闭合")
+
+    def test_self_contained_no_external_refs(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = assemble_sheet(self._artworks(Path(d)))
+            import re
+            for href in re.findall(r'href="([^"]+)"', r.svg):
+                self.assertTrue(href.startswith("data:"),
+                                f"发现外链依赖：{href[:60]}")
+
+    def test_rejects_low_resolution_assets(self):
+        """资产像素不足以支撑 300dpi 时必须拒绝，而不是默默印糊。"""
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError) as ctx:
+                assemble_sheet(self._artworks(Path(d), px=120))
+            self.assertIn("dpi", str(ctx.exception))
+
+
+class TestVerify(unittest.TestCase):
+    def _build(self, d: Path) -> Path:
+        arts = []
+        for i in range(6):
+            p = d / f"a{i}.png"
+            p.write_bytes(make_png(900, 900))
+            arts.append(p)
+        r = assemble_sheet(arts, order_id="V-1", source_sha256="b" * 64)
+        svg = d / "sheet.svg"
+        svg.write_text(r.svg, encoding="utf-8")
+        return svg
+
+    def test_verifier_accepts_own_output(self):
+        with tempfile.TemporaryDirectory() as d:
+            rep = verify_sheet(self._build(Path(d)))
+            self.assertTrue(rep.ok, rep.to_text())
+            self.assertTrue(rep.needs_human,
+                            "内容合规必须始终列为人工复检，不能被自动判绿")
+
+    def test_verifier_catches_tampering(self):
+        """手改 SVG 绕过检查必须被抓到。"""
+        with tempfile.TemporaryDirectory() as d:
+            svg = self._build(Path(d))
+            text = svg.read_text(encoding="utf-8")
+
+            # 1) 删掉一条刀线
+            broken = text.replace('<path id="cut-6"', '<rect id="cut-6-dead"', 1)
+            svg.write_text(broken, encoding="utf-8")
+            self.assertFalse(verify_sheet(svg).ok)
+
+            # 2) 改成外链位图
+            broken = text.replace("data:image/png;base64,", "https://cdn.example/x.png#", 1)
+            svg.write_text(broken, encoding="utf-8")
+            rep = verify_sheet(svg)
+            self.assertFalse(rep.ok)
+            self.assertTrue(any("外部资源" in c.name for c in rep.failed))
+
+            # 3) 改画布尺寸
+            broken = text.replace('width="148mm"', 'width="210mm"', 1)
+            svg.write_text(broken, encoding="utf-8")
+            self.assertFalse(verify_sheet(svg).ok)
+
+    def test_verifier_reports_missing_file(self):
+        rep = verify_sheet(Path(tempfile.gettempdir()) / "nope.svg")
+        self.assertFalse(rep.ok)
+
+
+class TestSpecParity(unittest.TestCase):
+    """零依赖层与 engine/ 层的印刷规格必须同值。
+
+    两层各自实现几何，如果常量偷偷跑偏，会出现"本地验收过了、
+    引擎产出的版却不合规"这种最难查的问题。
+    """
+
+    def test_engine_config_matches(self):
+        engine_cfg = ROOT / "engine" / "stickerpress" / "config.py"
+        if not engine_cfg.exists():
+            self.skipTest("engine/ 未安装")
+        ns = {}
+        src = engine_cfg.read_text(encoding="utf-8")
+        # 不 import engine（它依赖 numpy/PIL），只取字面量
+        import re
+        def grab(name, text=src):
+            m = re.search(rf"^\s*{name}: float = ([\d.]+)", text, re.M)
+            return float(m.group(1)) if m else None
+
+        spec = SheetSpec()
+        for name, mine in (("bleed_mm", spec.bleed_mm),
+                           ("safe_margin_mm", spec.safe_margin_mm),
+                           ("gutter_mm", spec.gutter_mm),
+                           ("min_knife_gap_mm", spec.min_knife_gap_mm),
+                           ("piece_min_mm", spec.piece_min_mm),
+                           ("piece_max_mm", spec.piece_max_mm),
+                           ("piece_hard_min_mm", spec.piece_hard_min_mm)):
+            theirs = grab(name)
+            self.assertIsNotNone(theirs, f"engine/config.py 未找到 {name}")
+            self.assertAlmostEqual(mine, theirs, places=4,
+                                   msg=f"{name} 两层不一致：{mine} vs {theirs}")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

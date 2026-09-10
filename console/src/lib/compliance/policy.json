@@ -1,0 +1,240 @@
+{
+  "policy_version": "2026.09-r3",
+  "updated_at": "2026-09-10",
+  "owner": "内容风控质量",
+  "gates": {
+    "ingest": {
+      "enabled": true,
+      "vlm_review": true
+    },
+    "generation": {
+      "enabled": true,
+      "vlm_review": false
+    },
+    "egress": {
+      "enabled": true,
+      "vlm_review": true
+    }
+  },
+  "fail_mode": "review",
+  "categories": [
+    {
+      "code": "A1",
+      "key": "minor_portrait",
+      "name": "未成年人肖像",
+      "group": "肖像",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"],
+      "rationale": "实体贴纸会脱离平台流转、可被二次传播且无法召回。未成年人肖像商品化在 《未成年人保护法》《个人信息保护法》下需监护人单独同意，产品侧不具备 核验能力，因此在 C 端自助链路一律拦截。",
+      "remediation": "走 B 端定制通道，上传监护人授权书后由人工开单。"
+    },
+    {
+      "code": "A2",
+      "key": "third_party_portrait",
+      "name": "非本人／多人肖像",
+      "group": "肖像",
+      "severity": "S1",
+      "action": "review",
+      "gates": ["ingest"],
+      "rationale": "肖像权需被拍摄者授权；多人合影无法自动判定授权范围。",
+      "judging_note": "只有当画面中出现**真实人类面孔**时才命中。宠物、玩偶、卡通形象、 雕塑、无脸的背影一律不命中。单人自拍也应命中（无法确认是否本人）， 但严重度低于多人合影。",
+      "remediation": "下单前需勾选肖像授权承诺书，并留存承诺记录。"
+    },
+    {
+      "code": "A3",
+      "key": "public_figure",
+      "name": "公众人物／名人",
+      "group": "肖像",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"],
+      "rationale": "名人肖像商业化涉及肖像权+商品化权，且极易引发舆情。"
+    },
+    {
+      "code": "B1",
+      "key": "known_character",
+      "name": "知名 IP 角色",
+      "group": "知识产权",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"],
+      "rationale": "动漫／游戏／影视角色的形象著作权明确，\"AI 二创 + 实体售卖\"是侵权高发场景， 且权利人维权成本低、批量取证容易。出料侧同样要查，防止模型自发漂移出 IP 特征。"
+    },
+    {
+      "code": "B2",
+      "key": "trademark_logo",
+      "name": "商标／品牌 Logo",
+      "group": "知识产权",
+      "severity": "S1",
+      "action": "mitigate",
+      "mitigation": "erase_and_regenerate",
+      "gates": ["ingest", "egress"],
+      "rationale": "照片里偶然入镜的品牌 Logo 可自动擦除后继续生成，不必直接拒单。",
+      "judging_note": "需能明确指认出是哪个品牌才命中；泛化的图形、无字样的几何标记不算。"
+    },
+    {
+      "code": "B3",
+      "key": "artwork_replica",
+      "name": "他人美术作品复制",
+      "group": "知识产权",
+      "severity": "S2",
+      "action": "review",
+      "gates": ["ingest"]
+    },
+    {
+      "code": "C1",
+      "key": "sexual",
+      "name": "色情低俗",
+      "group": "违禁",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"]
+    },
+    {
+      "code": "C2",
+      "key": "violence_gore",
+      "name": "血腥暴力",
+      "group": "违禁",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"]
+    },
+    {
+      "code": "C3",
+      "key": "political_symbol",
+      "name": "政治敏感／国家象征",
+      "group": "违禁",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"],
+      "rationale": "含国旗、国徽、领导人形象、国界地图的实体印刷品受专门法规约束 （《国旗法》《地图管理条例》等），地图问题在印刷品上属于零容忍项。"
+    },
+    {
+      "code": "C4",
+      "key": "hate_discrimination",
+      "name": "歧视／仇恨符号",
+      "group": "违禁",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"]
+    },
+    {
+      "code": "C5",
+      "key": "contraband",
+      "name": "毒品／武器／赌博",
+      "group": "违禁",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"]
+    },
+    {
+      "code": "C6",
+      "key": "self_harm",
+      "name": "自残／极端行为",
+      "group": "违禁",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"]
+    },
+    {
+      "code": "D1",
+      "key": "identity_document",
+      "name": "证件／银行卡／车牌",
+      "group": "隐私",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"],
+      "rationale": "证件号、卡号、车牌一旦被印上实体贴纸即为不可撤回的信息泄露。"
+    },
+    {
+      "code": "D2",
+      "key": "machine_readable_code",
+      "name": "二维码／条码",
+      "group": "隐私",
+      "severity": "S1",
+      "action": "block",
+      "gates": ["egress"],
+      "rationale": "实体贴纸上的二维码是不可控的跳转载体，可被用于诈骗投放； 即使原图无害，也不允许成品携带任何机读码。"
+    },
+    {
+      "code": "D3",
+      "key": "exif_geolocation",
+      "name": "EXIF 地理位置／设备信息",
+      "group": "隐私",
+      "severity": "S2",
+      "action": "mitigate",
+      "mitigation": "strip_exif",
+      "gates": ["ingest"],
+      "rationale": "上传即自动剥离，属默认脱敏项，不打扰用户。"
+    },
+    {
+      "code": "E1",
+      "key": "text_on_sticker",
+      "name": "贴纸上出现文字",
+      "group": "印刷",
+      "severity": "S2",
+      "action": "review",
+      "gates": ["egress"],
+      "rationale": "双重风险：一是生成模型的文字拼写错误会直接变成印刷废品（不可返工）， 二是文案本身可能越过广告法/敏感词。默认策略是\"贴纸不带可读文案\"。",
+      "judging_note": "只统计**可读文案**：单词、短语、句子、品牌字样、网址、数字串。 纯装饰性的拟声符号与标点不算命中，例如 Zzz、!、?、♪、★、❤、 以及漫画气泡里的效果线。判定时以\"印错了会不会变成废品/引发纠纷\"为准。"
+    },
+    {
+      "code": "E2",
+      "key": "currency_imagery",
+      "name": "货币图样",
+      "group": "印刷",
+      "severity": "S0",
+      "action": "block",
+      "gates": ["ingest", "egress"],
+      "rationale": "《人民币图样使用管理办法》对实体印刷有明确许可要求，属硬红线。"
+    },
+    {
+      "code": "E3",
+      "key": "medical_claim",
+      "name": "功效／医疗宣称",
+      "group": "印刷",
+      "severity": "S1",
+      "action": "block",
+      "gates": ["generation", "egress"]
+    }
+  ],
+  "generation_guardrails": {
+    "positive": [
+      "original character design derived only from the uploaded reference photo",
+      "generic, non-branded, non-trademarked appearance",
+      "wholesome and family-friendly"
+    ],
+    "negative": [
+      "no brand logos, no trademarks, no product packaging",
+      "no recognizable copyrighted cartoon, anime, game or movie characters",
+      "no celebrities or public figures",
+      "no text, no letters, no numbers, no watermark, no signature",
+      "no QR codes, no barcodes",
+      "no flags, no national emblems, no maps, no political symbols",
+      "no currency, no banknotes, no coins",
+      "no weapons, no blood, no gore, no drugs",
+      "no nudity, no suggestive posing",
+      "no religious symbols"
+    ]
+  },
+  "keyword_blocklist": [
+    "身份证",
+    "银行卡",
+    "二维码",
+    "国旗",
+    "国徽",
+    "人民币",
+    "处方",
+    "根治",
+    "特效药"
+  ],
+  "quality_thresholds": {
+    "min_effective_dpi": 300,
+    "min_sticker_area_ratio": 0.25,
+    "max_sticker_area_ratio": 0.98,
+    "min_knife_gap_mm": 8.0,
+    "min_alpha_components": 1,
+    "required_sticker_count": 6
+  }
+}
