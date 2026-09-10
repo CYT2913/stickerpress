@@ -137,4 +137,4 @@ python3 engine/tools/make_redteam_samples.py   # 生成对抗样本
 python3 engine/tools/redteam_suite.py          # 跑回归
 ```
 
-样本在 `engine/samples/redteam/`。**每次修改 `policy.yaml` 后必须跑红队回归**——历史上出现过仿证件样本被误判 `pass` 的严重漏检（原因是 VLM 输出被包在工具结果外壳里、解析器未解包，见 `CHANGELOG.md`）。审核链路的 bug 不会自己暴露，只能靠对抗样本打出来。
+样本落在 `engine/samples/redteam/`。这些是图片，按仓库文件安全规则**不入库**，需要时用上面的脚本本地重新生成。**每次修改 `policy.yaml` 后必须跑红队回归**——历史上出现过仿证件样本被误判 `pass` 的严重漏检（原因是 VLM 输出被包在工具结果外壳里、解析器未解包，见 `CHANGELOG.md`）。审核链路的 bug 不会自己暴露，只能靠对抗样本打出来。

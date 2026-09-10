@@ -16,7 +16,7 @@
 ├─ engine/                  # 完整 Python 产线（生图 + 合规 + 抠图 + 切分 + 刀版）
 │  ├─ stickerpress/         # 主包
 │  ├─ tools/                # 策略同步、红队样本、红队回归
-│  └─ samples/              # 红队样本
+│  └─ samples/              # 红队对抗样本（图片，本地生成，不入库）
 ├─ console/                 # Web 操作台（EdenX + React 19 + TypeScript）
 ├─ assets/samples/          # 脱敏示例：A5 台纸 SVG、预览 PNG、6 枚贴纸 PNG
 ├─ docs/                    # 印刷规格、视觉资产契约、合规、模型与额度
