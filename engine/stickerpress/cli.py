@@ -138,8 +138,12 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--sheet", default=None, help="跳过 AI，直接排版指定的六宫格大图")
     r.add_argument("--resolution", default="4k", choices=["1k", "2k", "4k"],
                    help="生成分辨率（默认 4k，保证 300dpi 印刷）")
-    r.add_argument("--bleed", type=float, default=3.0, help="出血 mm（默认 3）")
-    r.add_argument("--gutter", type=float, default=6.0, help="贴纸间距 mm（默认 6）")
+    r.add_argument("--bleed", type=float, default=SheetSpec.bleed_mm,
+                   help=f"出血 mm（默认 {SheetSpec.bleed_mm:g}：kiss-cut 台纸不需要出血；"
+                        f"整切工艺才设 3）")
+    r.add_argument("--gutter", type=float, default=SheetSpec.gutter_mm,
+                   help=f"贴纸间距 mm（默认 {SheetSpec.gutter_mm:g}，"
+                        f"对应刀线净距门槛）")
     r.add_argument("--job-id", default=None, help="指定作业号")
     r.add_argument("--operator", default=getpass.getuser(), help="操作人")
     r.add_argument("--policy-file", default=None, help="自定义策略 YAML")

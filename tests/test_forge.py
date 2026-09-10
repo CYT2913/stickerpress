@@ -224,6 +224,21 @@ class TestAssemble(unittest.TestCase):
                 assemble_sheet(self._artworks(Path(d), px=120))
             self.assertIn("dpi", str(ctx.exception))
 
+    def test_each_bitmap_embedded_exactly_once(self):
+        """每张位图只能内嵌一份。
+
+        曾经同时写 xlink:href 和 SVG2 的 href，两个属性各存一份完整 data URI，
+        400dpi 台纸凭空多出十几 MB。这里按 base64 载荷计数卡住回归。
+        """
+        import re
+        with tempfile.TemporaryDirectory() as d:
+            r = assemble_sheet(self._artworks(Path(d)))
+            self.assertEqual(len(re.findall(r"base64,", r.svg)), 6,
+                             "6 张贴纸应当只有 6 段 base64 载荷")
+            self.assertEqual(len(re.findall(r"<image", r.svg)), 6)
+            self.assertNotIn(' href="data:', r.svg,
+                             "不要再写与 xlink:href 重复的 href 属性")
+
 
 class TestVerify(unittest.TestCase):
     def _build(self, d: Path) -> Path:

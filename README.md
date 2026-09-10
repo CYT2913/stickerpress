@@ -126,6 +126,8 @@ cd console && pnpm sync:samples   # 同步示例台纸到 demo 资源
 
 详细链路、覆盖方式和额度换算见 [`docs/MODEL_AND_QUOTA.md`](docs/MODEL_AND_QUOTA.md)。
 
+**只有 ChatGPT Plus、没有 API 额度**也能跑通：在 ChatGPT 里人工出一张品红六宫格大图，再用 `--sheet` 走本地装配，全程零 API 花费。步骤和提示词模板见 [`docs/USE_WITH_CHATGPT_PLUS.md`](docs/USE_WITH_CHATGPT_PLUS.md)。
+
 ---
 
 ## 6. 文件安全
@@ -147,4 +149,5 @@ cd console && pnpm sync:samples   # 同步示例台纸到 demo 资源
 - [`docs/ARTWORK_CONTRACT.md`](docs/ARTWORK_CONTRACT.md) — 六张插画资产的交付契约
 - [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) — 合规策略与三道闸
 - [`docs/MODEL_AND_QUOTA.md`](docs/MODEL_AND_QUOTA.md) — 生图模型链路与额度换算
+- [`docs/USE_WITH_CHATGPT_PLUS.md`](docs/USE_WITH_CHATGPT_PLUS.md) — 只有 ChatGPT Plus 时怎么跑通（含提示词模板）
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 三层架构与数据流

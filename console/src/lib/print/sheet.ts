@@ -230,8 +230,11 @@ function renderSvg(
   a('  <g id="artwork" inkscape:groupmode="layer" inkscape:label="artwork">');
   placements.forEach((p, i) => {
     const href = pngs[i];
+    // 只写 xlink:href，不再同时写 SVG2 的 href：
+    // 两个属性各存一份完整 data URI 会让文件体积翻倍（400dpi 台纸多出十几 MB），
+    // 而 Illustrator / 印厂 RIP 认 xlink:href，主流浏览器也仍然兼容它。
     a(
-      `    <image id="sticker-${p.index}" x="${p.x.toFixed(3)}" y="${p.y.toFixed(3)}" width="${p.w.toFixed(3)}" height="${p.h.toFixed(3)}" preserveAspectRatio="none" image-rendering="optimizeQuality" xlink:href="${href}" href="${href}"/>`,
+      `    <image id="sticker-${p.index}" x="${p.x.toFixed(3)}" y="${p.y.toFixed(3)}" width="${p.w.toFixed(3)}" height="${p.h.toFixed(3)}" preserveAspectRatio="none" image-rendering="optimizeQuality" xlink:href="${href}"/>`,
     );
   });
   a('  </g>');

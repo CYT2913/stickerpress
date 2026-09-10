@@ -2,6 +2,22 @@
 
 本文件只增不改。新条目必须写在最上方。
 
+## 2026-09-10 — 修复 CLI 规格漂移与位图重复内嵌，补 ChatGPT Plus 使用路径
+
+### 修复
+
+- **`engine/stickerpress/cli.py` 的规格漂移**：`--bleed` 默认仍是 `3.0`、`--gutter` 默认仍是 `6.0`，会在运行时覆盖已对齐的 `SheetSpec`，导致命令行跑出来的其实是 154 × 216 mm、6 mm 间距的旧版面——上一次的规格统一在 CLI 这一层是失效的。现改为从 `SheetSpec` 取默认值，改一处即全链路生效。
+- **每张位图被内嵌两份**：`<image>` 同时写 `xlink:href` 和 SVG2 的 `href`，两个属性各存一份完整 data URI，文件体积凭空翻倍。示例台纸 11.97 MB → 6.05 MB，前端构建产物 15.2 MB → 9.0 MB。三层（装配层 / engine / console）一并修正，只保留 Illustrator 与印厂 RIP 都认的 `xlink:href`。新增单测按 base64 载荷计数卡住回归。
+
+### 新增
+
+- `docs/USE_WITH_CHATGPT_PLUS.md`：只有 ChatGPT Plus、没有 API 额度时的完整跑通路径。含订阅关系澄清（Codex 含在 Plus 内、Plus 不含 API）、品红六宫格提示词模板、分辨率换算表、`--sheet` 本地装配命令、三条路线成本对比。全流程已实测。
+- 单测增至 24 项。
+
+### 变更
+
+- `assets/samples/stickers/*.png` 由 500 px 缩略图替换为示例台纸真正内嵌的印刷级资产（690–883 px）。此前仓库里的示例贴纸与示例台纸并非同一批文件，照着跑复现不出 400 dpi 的结果；现在两者一致，实测 `forge.py assemble` 可直接产出最低 400 dpi、自动验收全过的交付。
+
 ## 2026-09-10 — 并入完整产线与操作台，统一印刷规格，补齐文档
 
 ### 新增

@@ -60,13 +60,18 @@ GenerationRequest
 
 ### 2.1 结论先行
 
-**Codex 订阅不是图片额度包。** 「开通 Codex Plus 能出几张照片」这个问题不能直接换算，因为：
+**Codex 不是独立订阅，也不是图片额度包。** Codex 已包含在 ChatGPT Free / Go / Plus / Pro / Business / Enterprise 各套餐中——所谓"开通 Codex Plus"，实际就是开了一份 **ChatGPT Plus**。
 
-1. Codex 是 OpenAI 的**编码 Agent**，其用量额度衡量的是编码任务；
+但"同一份订阅"不等于"同一个额度池"：
+
+1. Codex 是**编码 Agent**，其用量额度衡量的是编码任务；
 2. OpenAI 官方帮助中心明确说明：ChatGPT 的**文件上传、图像生成、语音**等功能有**各自独立的使用限制**，这些限制不适用于 Codex；
-3. 反过来，Codex 的额度也不会转换成图片张数。
+3. 反过来，Codex 的额度也不会转换成图片张数；
+4. 更关键的是：**ChatGPT Plus 不包含 API 用量**，API 单独计费。所以 Plus 订阅接不上本项目的自动生图 Provider。
 
 所以正确的问法是：**你用哪条图像通道，那条通道当前给你多少配额。**
+
+> 只有 Plus、不想充 API 的走法见 [`USE_WITH_CHATGPT_PLUS.md`](USE_WITH_CHATGPT_PLUS.md)：在 ChatGPT 里人工出图，再用 `--sheet` 走本地装配，全程零 API 花费。
 
 ### 2.2 三种通道各自的算法
 

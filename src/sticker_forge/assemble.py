@@ -203,11 +203,14 @@ def _render(spec: SheetSpec, placements: List[Placement],
     a('  <g id="artwork" inkscape:groupmode="layer" inkscape:label="artwork">')
     for p, (mime, b64) in zip(placements, b64s):
         uri = f"data:{mime};base64,{b64}"
+        # 只写 xlink:href，不再同时写 SVG2 的 href：
+        # 两个属性各存一份完整 data URI 会让文件体积翻倍（400dpi 台纸多出十几 MB），
+        # 而 Illustrator / 印厂 RIP 认 xlink:href，主流浏览器也仍然兼容它。
         a(f'    <image id="sticker-{p.index}" '
           f'x="{p.x_mm:.3f}" y="{p.y_mm:.3f}" '
           f'width="{p.w_mm:.3f}" height="{p.h_mm:.3f}" '
           f'preserveAspectRatio="none" image-rendering="optimizeQuality" '
-          f'xlink:href="{uri}" href="{uri}"/>')
+          f'xlink:href="{uri}"/>')
     a('  </g>')
 
     a(f'  <g id="{CUT_SPOT_NAME}" inkscape:groupmode="layer" '
