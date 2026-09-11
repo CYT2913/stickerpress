@@ -12,7 +12,7 @@
 .
 ├─ forge.py                 # 零依赖装配器 CLI（预检 / 权利模板 / 装配 / 验收）
 ├─ src/sticker_forge/       # 装配器实现，仅用 Python 标准库，不联网、不生图
-├─ tests/test_forge.py      # 离线单元测试（23 项）
+├─ tests/test_forge.py      # 离线单元测试（24 项）
 ├─ engine/                  # 完整 Python 产线（生图 + 合规 + 抠图 + 切分 + 刀版）
 │  ├─ stickerpress/         # 主包
 │  ├─ tools/                # 策略同步、红队样本、红队回归
@@ -150,4 +150,5 @@ cd console && pnpm sync:samples   # 同步示例台纸到 demo 资源
 - [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) — 合规策略与三道闸
 - [`docs/MODEL_AND_QUOTA.md`](docs/MODEL_AND_QUOTA.md) — 生图模型链路与额度换算
 - [`docs/USE_WITH_CHATGPT_PLUS.md`](docs/USE_WITH_CHATGPT_PLUS.md) — 只有 ChatGPT Plus 时怎么跑通（含提示词模板）
+- [`docs/CODEX_ONBOARDING.md`](docs/CODEX_ONBOARDING.md) — 换台电脑后怎么让 Codex 接手（含开场白模板）
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 三层架构与数据流
