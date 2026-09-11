@@ -2,6 +2,13 @@
 
 本文件只增不改。新条目必须写在最上方。
 
+## 2026-09-11 — 仓库改名为 stickerpress
+
+- GitHub 仓库由 `CYT2913/-` 改名为 `CYT2913/stickerpress`。原名是单个减号，`cd -` 在 shell 里表示"回到上一个目录"，clone 下来的目录名会让人和 Agent 同时踩坑（见下一条 9-11 记录）。
+- 新地址：`https://github.com/CYT2913/stickerpress`。GitHub 会为旧地址保留重定向，旧的 clone / remote 暂时仍可用，但请尽快切换。
+- 已有本地副本切换 remote：`git remote set-url origin https://github.com/CYT2913/stickerpress.git`。
+- 同步更新 `README.md`（新增 clone 步骤）、`docs/CODEX_ONBOARDING.md`、`docs/USE_WITH_CHATGPT_PLUS.md` 中的仓库地址；clone 命令不再需要手动指定目录名。
+
 ## 2026-09-11 — 新增跨机器 Codex 接手指南
 
 - 新增 `docs/CODEX_ONBOARDING.md`：换电脑后让 Codex 接手本项目的完整说明，含五套可直接粘贴的开场白（通用接手 / 从 ChatGPT 大图跑一单 / 已有 6 张资产 / 改规格 / 提交推送）、每句话防的是什么、跨机器 git 带不过去的东西清单、权限档位建议、人工验收清单。

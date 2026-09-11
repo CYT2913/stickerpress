@@ -83,7 +83,7 @@ ChatGPT App（Plus）           本地（零依赖 / 零网络）
 ### 第 3 步：本地跑装配
 
 ```bash
-git clone https://github.com/CYT2913/-.git stickerpress && cd stickerpress
+git clone https://github.com/CYT2913/stickerpress.git && cd stickerpress
 
 # 需要 PIL / numpy / scipy
 pip install pillow numpy scipy pyyaml

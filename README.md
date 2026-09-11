@@ -41,6 +41,12 @@
 环境：Python 3.9+，装配层无第三方依赖。
 
 ```bash
+git clone https://github.com/CYT2913/stickerpress.git
+cd stickerpress
+python3 -m unittest discover -s tests   # 自检：24 项应全过
+```
+
+```bash
 # 1) 只做来源预检：校验格式、记录 SHA-256，不产出文件、不联网
 python3 forge.py preflight /path/to/photo.jpg
 

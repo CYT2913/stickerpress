@@ -9,14 +9,16 @@
 新机器上装好 Codex CLI，然后：
 
 ```bash
-git clone https://github.com/CYT2913/-.git stickerpress
+git clone https://github.com/CYT2913/stickerpress.git
 cd stickerpress
 codex
 ```
 
 进入 Codex 后，粘贴第 3 节的开场白。
 
-> ⚠️ **必须改目录名。** 这个仓库的名字就是一个减号 `-`。直接 `git clone` 会得到一个叫 `-` 的目录，而 `cd -` 在 shell 里的含义是"回到上一个目录"——你和 Codex 都会在这里翻车（本项目开发时就踩过）。所以 clone 时一定要在末尾加一个正常的目录名。
+> 📌 仓库原名是单个减号 `-`，2026-09-11 改名为 `stickerpress`。旧地址 GitHub 会自动重定向，但请改用新地址。
+>
+> 如果你在旧机器上还留着叫 `-` 的目录，建议直接删掉重新 clone：`cd -` 在 shell 里的含义是"回到上一个目录"，那个目录名会让你和 Codex 都翻车（本项目开发时踩过）。
 
 ---
 
@@ -45,8 +47,8 @@ codex login          # 选 "Sign in with ChatGPT"
 # 3) Python 3.9+ 即可，装配层零第三方依赖
 python3 --version
 
-# 4) 拉代码（注意末尾的目录名）
-git clone https://github.com/CYT2913/-.git stickerpress
+# 4) 拉代码
+git clone https://github.com/CYT2913/stickerpress.git
 cd stickerpress
 
 # 5) 自检：应该 24 项全过
