@@ -2,7 +2,8 @@
 """检查一张图能不能直接进产线：有没有真 alpha、是不是"假透明"、能切出几张。
 
 用法：
-    python3 engine/tools/check_alpha.py <图片路径> [更多图片...]
+    python3 engine/tools/check_alpha.py sheet.png              # 六宫格大图（默认）
+    python3 engine/tools/check_alpha.py art/*.png --single     # 一张一张存的单枚贴纸
     python3 engine/tools/check_alpha.py sheet.png --expect 6
 
 判断依据说明：
@@ -35,7 +36,7 @@ from engine.stickerpress.imaging.chroma import (  # noqa: E402
 from engine.stickerpress.imaging.segment import split_sheet  # noqa: E402
 
 
-def check(path: Path, expect: int) -> bool:
+def check(path: Path, expect: int, print_dpi: bool = True) -> bool:
     print(f"\n=== {path.name} ===")
     try:
         img = Image.open(path)
@@ -46,6 +47,15 @@ def check(path: Path, expect: int) -> bool:
     w, h = img.size
     print(f"  尺寸      : {w} × {h} px（{w * h / 1e6:.1f} MP）")
     print(f"  PIL mode  : {img.mode}")
+    if print_dpi:
+        # 印刷按每枚贴纸自己的像素算。单枚成品上限 62 mm，按 56 mm 常见值估。
+        px = min(w, h) if expect == 1 else min(w / 2, h / 3)
+        dpi = px / (56 / 25.4)
+        mark = "✅" if dpi >= 300 else "❌"
+        note = "" if dpi >= 300 else "  ← 低于 300 dpi 印刷门槛，必须要更大的原图"
+        # 这是上限：主体只占格位的一部分，产线按主体外接框裁切后实际会更低。
+        print(f"  dpi 上限  : {mark} 约 {dpi:.0f} dpi（按单枚 56 mm 估，"
+              f"实际裁切后更低）{note}")
 
     s = alpha_stats(img)
     if not s["has_alpha_channel"]:
@@ -94,11 +104,17 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="检查图片透明度与可切分性")
     ap.add_argument("images", nargs="+", type=Path)
     ap.add_argument("--expect", type=int, default=6, help="期望切出的贴纸数，默认 6")
+    ap.add_argument("--single", action="store_true",
+                    help="每个文件是一枚独立贴纸（一张一张保存的情况），等价于 --expect 1")
     args = ap.parse_args()
 
-    ok = [check(p, args.expect) for p in args.images]
+    expect = 1 if args.single else args.expect
+    ok = [check(p, expect) for p in args.images]
     total, good = len(ok), sum(ok)
-    print(f"\n{'-' * 46}\n合计：{good}/{total} 张可直接进产线")
+    unit = "枚贴纸" if expect == 1 else "张大图"
+    print(f"\n{'-' * 46}\n合计：{good}/{total} {unit}可直接进产线")
+    if expect == 1 and good == total and total != 6:
+        print(f"提示：装配层要求正好 6 枚，当前给了 {total} 个文件。")
     return 0 if good == total else 1
 
 
