@@ -64,7 +64,7 @@ outputs/：a5-six-stickers.svg + source-original.* + delivery-report.md
 ```
 用户照片 ──→ load_source()：格式校验 + SHA-256 + 字节级复制
 rights.json ─→ 权利校验（缺省即拒绝）→ 不通过则退出码 2，只出报告
-6 张资产 ──→ read_size() → spec.fit() → data URI 内嵌
+6 张资产 ──→ read_size() → spec.fit() → 可选按目标 DPI 居中缩小 → data URI 内嵌
               ↓
          几何硬校验：dpi / 单枚尺寸 / 刀线净距 / 安全边距
               ↓ strict=True 时不达标直接抛错
@@ -106,7 +106,7 @@ rights.json ─→ 权利校验（缺省即拒绝）→ 不通过则退出码 2�
 | `imagesize.py` | 零依赖解析 PNG / JPEG / WebP 宽高 |
 | `source.py` | 来源照片校验、SHA-256、字节级复制 |
 | `rights.py` | 权利声明解析，缺省即拒绝 |
-| `assemble.py` | 装配 A5 SVG，几何硬校验 |
+| `assemble.py` | 装配 A5 SVG，可选按目标 DPI 缩小实体尺寸，执行几何硬校验 |
 | `verify.py` | 独立复核 SVG，含自写 path 解析 |
 | `report.py` | 生成 `delivery-report.md` |
 
@@ -138,6 +138,7 @@ rights.json ─→ 权利校验（缺省即拒绝）→ 不通过则退出码 2�
 | 优先真 alpha、品红色度键降为兜底 | 模型确实能给真透明 PNG，直通质量更好 | 需要额外判别假透明棋盘格 |
 | kiss-cut 默认无出血 | 台纸边不参与裁切，出血会让成品超出 A5 | 整切工艺需手动开启 |
 | 自写 SVG path 解析而非引库 | 装配层零依赖 | 只支持交付所需的命令子集 |
+| 低像素资产只缩小实体尺寸 | 保留原始像素，避免插值制造虚假清晰度 | 成品贴纸会变小，低于单边 20 mm 时拒绝 |
 
 ---
 

@@ -12,6 +12,7 @@ placement 决定，间距、安全边距、闭合性都能在装配期算准并�
 from __future__ import annotations
 
 import base64
+import math
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -59,12 +60,16 @@ class AssembleResult:
     min_knife_gap_mm: float = 0.0
     min_margin_mm: float = 0.0
     min_effective_dpi: float = 0.0
+    target_dpi: Optional[float] = None
+    auto_shrunk_count: int = 0
 
     def to_dict(self) -> Dict:
         return {
             "min_knife_gap_mm": round(self.min_knife_gap_mm, 2),
             "min_margin_mm": round(self.min_margin_mm, 2),
             "min_effective_dpi": round(self.min_effective_dpi, 1),
+            "target_dpi": round(self.target_dpi, 1) if self.target_dpi is not None else None,
+            "auto_shrunk_count": self.auto_shrunk_count,
             "placements": [p.to_dict() for p in self.placements],
         }
 
@@ -105,6 +110,7 @@ def assemble_sheet(
     brand: str = "StickerPress",
     title: str = "A5 六枚模切贴纸台纸",
     strict: bool = True,
+    target_dpi: Optional[float] = None,
 ) -> AssembleResult:
     """装配 A5 台纸。
 
@@ -114,6 +120,12 @@ def assemble_sheet(
     spec = spec or SheetSpec()
     paths = [Path(p) for p in artworks]
 
+    if target_dpi is not None:
+        target_dpi = float(target_dpi)
+        if not math.isfinite(target_dpi) or target_dpi < PRINT_DPI_MIN:
+            raise ValueError(
+                f"目标 dpi 必须是有限数且不低于印刷门槛 {PRINT_DPI_MIN}dpi")
+
     if len(paths) != spec.slots:
         raise ValueError(
             f"需要正好 {spec.slots} 张贴纸资产，实际收到 {len(paths)} 张。"
@@ -122,6 +134,7 @@ def assemble_sheet(
     cells = spec.cell_boxes()
     placements: List[Placement] = []
     b64s: List[Tuple[str, str]] = []
+    auto_shrunk_count = 0
 
     for i, (p, cell) in enumerate(zip(paths, cells)):
         if not p.exists():
@@ -130,6 +143,15 @@ def assemble_sheet(
         fmt, iw, ih = read_size(data)
         x, y, w, h = spec.fit(cell, (iw, ih))
         dpi = iw / (w / 25.4) if w > 0 else 0.0
+        if target_dpi is not None and dpi < target_dpi:
+            scale = dpi / target_dpi
+            w *= scale
+            h *= scale
+            cx, cy, cw, ch = cell
+            x = cx + (cw - w) / 2
+            y = cy + (ch - h) / 2
+            dpi = iw / (w / 25.4)
+            auto_shrunk_count += 1
         placements.append(Placement(
             index=i + 1, x_mm=x, y_mm=y, w_mm=w, h_mm=h,
             src_px=(iw, ih), src_name=p.name, effective_dpi=dpi,
@@ -151,9 +173,10 @@ def assemble_sheet(
             problems.append(f"刀线最小净距 {gap:.2f}mm < 门槛 {spec.min_knife_gap_mm}mm")
         if margin < spec.safe_margin_mm - 1e-6:
             problems.append(f"安全边距 {margin:.2f}mm < 门槛 {spec.safe_margin_mm}mm")
-        if min_dpi < PRINT_DPI_MIN:
+        required_dpi = target_dpi or PRINT_DPI_MIN
+        if min_dpi + 1e-6 < required_dpi:
             problems.append(
-                f"最低有效分辨率 {min_dpi:.0f}dpi < 门槛 {PRINT_DPI_MIN}dpi；"
+                f"最低有效分辨率 {min_dpi:.0f}dpi < 门槛 {required_dpi:g}dpi；"
                 f"请提供更高像素的资产")
         small = [p.index for p in placements
                  if min(p.w_mm, p.h_mm) < spec.piece_hard_min_mm]
@@ -167,7 +190,9 @@ def assemble_sheet(
 
     svg = _render(spec, placements, b64s, order_id, source_sha256, brand, title)
     return AssembleResult(svg=svg, placements=placements, min_knife_gap_mm=gap,
-                          min_margin_mm=margin, min_effective_dpi=min_dpi)
+                          min_margin_mm=margin, min_effective_dpi=min_dpi,
+                          target_dpi=target_dpi,
+                          auto_shrunk_count=auto_shrunk_count)
 
 
 def _render(spec: SheetSpec, placements: List[Placement],

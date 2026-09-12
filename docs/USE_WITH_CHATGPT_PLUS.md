@@ -109,6 +109,8 @@ python3 engine/tools/check_alpha.py ~/Downloads/stickers.png
 
 **导出时选你账号能给的最大尺寸**。如果拿到的图偏小，装配层会明确报错而不是默默印糊——这是设计如此，别绕过它。
 
+如果单枚只有约 400–600 px，但你接受更小的实体贴纸，可用装配层的 `--target-dpi 300` 自动缩小尺寸。这不会增加图片细节，只是让现有像素覆盖更小的印刷面积；缩小后任一方向不足 20 mm 仍会被拒绝。
+
 ### 第 2.5 步：一张一张存，还是 6 张一起存？
 
 ChatGPT 通常两种都给。**优先一张一张存**，理由只有一个但很硬：**分辨率**。
@@ -127,7 +129,8 @@ ChatGPT 通常两种都给。**优先一张一张存**，理由只有一个但�
 
 ```bash
 python3 engine/tools/check_alpha.py art/*.png --single   # 逐枚自检
-python3 forge.py assemble source.jpg --artwork-dir art --rights rights.json --outdir out
+python3 forge.py assemble source.jpg --artwork-dir art --rights rights.json \
+  --outdir out --target-dpi 300
 ```
 
 单张保存的三个注意点：
@@ -196,8 +199,11 @@ python3 forge.py rights-template > rights.json   # 按实填写，别留 unknown
 python3 forge.py assemble /path/to/原图.jpg \
   --artwork-dir /path/to/art \
   --rights rights.json \
-  --outdir outputs/order-001 --order-id order-001
+  --outdir outputs/order-001 --order-id order-001 \
+  --target-dpi 300
 ```
+
+最后一行仅在需要缩小低像素资产时使用；印刷级资产可省略。装配器只缩小实体尺寸，不重采样位图。
 
 实测（用仓库 `assets/samples/stickers/` 的六张）：
 

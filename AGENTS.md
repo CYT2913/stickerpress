@@ -36,8 +36,11 @@ python forge.py assemble C:\path\to\photo.jpg `
   --artwork-dir C:\path\to\six-artworks `
   --rights C:\path\to\rights.json `
   --outdir outputs\order-001 `
-  --order-id order-001
+  --order-id order-001 `
+  --target-dpi 300
 ```
+
+`--target-dpi` 可选且不得低于 300。它只会按比例缩小 DPI 不足的贴纸实体尺寸，不会放大位图或增加细节；不传时保持原有排版。缩小后任一方向低于 20 mm 仍须拒绝。
 
 改动 `src/sticker_forge/`、`forge.py`、交付规格或权利校验逻辑后，必须运行全部单元测试。修改视觉生成策略前必须阅读 `docs/ARTWORK_CONTRACT.md`。
 

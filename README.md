@@ -12,7 +12,7 @@
 .
 ├─ forge.py                 # 零依赖装配器 CLI（预检 / 权利模板 / 装配 / 验收）
 ├─ src/sticker_forge/       # 装配器实现，仅用 Python 标准库，不联网、不生图
-├─ tests/                   # 离线单元测试（35 项）
+├─ tests/                   # 离线单元测试（41 项）
 ├─ engine/                  # 完整 Python 产线（生图 + 合规 + 抠图 + 切分 + 刀版）
 │  ├─ stickerpress/         # 主包
 │  ├─ tools/                # 策略同步、红队样本、红队回归
@@ -43,7 +43,7 @@
 ```bash
 git clone https://github.com/CYT2913/stickerpress.git
 cd stickerpress
-python3 -m unittest discover -s tests   # 自检：35 项应全过
+python3 -m unittest discover -s tests   # 自检：41 项应全过
 ```
 
 ```bash
@@ -58,11 +58,14 @@ python3 forge.py assemble /path/to/photo.jpg \
   --artwork-dir /path/to/six-artworks \
   --rights rights.json \
   --outdir outputs/order-001 \
-  --order-id order-001
+  --order-id order-001 \
+  --target-dpi 300
 
 # 4) 独立验收任意 A5 SVG（可用于复核别人给的文件）
 python3 forge.py verify outputs/order-001/a5-six-stickers.svg
 ```
+
+`--target-dpi` 可选。传入 300 或 400 后，低像素贴纸会按比例缩小实体尺寸直至达到目标 DPI；不会插值放大，也不会突破任一方向 20 mm 的硬下限。不传时保持原有版面行为。
 
 `assemble` 成功后 `outputs/order-001/` 含：
 

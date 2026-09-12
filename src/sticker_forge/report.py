@@ -66,6 +66,9 @@ def build_report(
     a(f"| 刀线 | `{CUT_SPOT_NAME}` 独立图层，{CUT_STROKE}，"
       f"{CUT_STROKE_PT} pt，闭合路径，kiss-cut 半切 |")
     a(f"| 分辨率门槛 | ≥ {PRINT_DPI_MIN} dpi |")
+    if result is not None and result.target_dpi is not None:
+        a(f"| 自动缩小目标 | {result.target_dpi:g} dpi（仅缩小，不放大；"
+          f"本单缩小 {result.auto_shrunk_count}/{len(result.placements)} 枚）|")
     a(f"| 刀线最小净距门槛 | ≥ {spec.min_knife_gap_mm:g} mm |")
     a("")
 

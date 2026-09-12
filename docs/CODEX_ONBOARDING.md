@@ -51,7 +51,7 @@ python3 --version
 git clone https://github.com/CYT2913/stickerpress.git
 cd stickerpress
 
-# 5) 自检：应该 35 项全过
+# 5) 自检：应该 41 项全过
 python3 -m unittest discover -s tests
 ```
 
@@ -81,7 +81,7 @@ Codex 会自动读取仓库根目录的 `AGENTS.md`，所以**不需要你把规
 - docs/ARCHITECTURE.md（三层结构）
 - docs/PRINT_SPEC.md（印刷硬门槛）
 
-然后跑 `python3 -m unittest discover -s tests`，确认 35 项全过，把结果告诉我。
+然后跑 `python3 -m unittest discover -s tests`，确认 41 项全过，把结果告诉我。
 ```
 
 ### 3.2 我在 ChatGPT 里一张一张存了 6 枚贴纸（**推荐路线**）
@@ -94,12 +94,13 @@ Codex 会自动读取仓库根目录的 `AGENTS.md`，所以**不需要你把规
 
 请按 docs/USE_WITH_CHATGPT_PLUS.md 第 2.5 步之后的流程跑一单：
 1. 先 `python3 engine/tools/check_alpha.py <贴纸目录>/*.png --single`，
-   逐枚确认「真透明」且 dpi 过 300，有不合格的直接告诉我别硬跑；
+   逐枚确认「真透明」并记录按 56 mm 估算的 dpi；低于 300 时不要硬跑默认布局，
+   改用 `forge.py assemble --target-dpi 300`，若所需实体尺寸会低于单边 20 mm 就停下；
 2. 读 docs/ARTWORK_CONTRACT.md 核对资产契约（正好 6 个文件、命名补零、
    资产目录不能混进原图）；
 3. `python3 forge.py preflight <照片路径>`，把 SHA-256 和格式念给我；
 4. 用 `forge.py rights-template` 生成权利声明模板给我，我填完再继续；
-5. 我填完后跑 forge.py assemble，输出到 outputs/<订单号>/；
+5. 我填完后跑 forge.py assemble，输出到 outputs/<订单号>/；低 dpi 资产按第 1 步显式加 `--target-dpi 300`；
 6. 最后 `python3 forge.py verify` 独立验收，把结果贴给我。
 
 注意：SVG 由 forge.py 生成，你不要自己写 SVG 或手改导出的 SVG。
@@ -160,7 +161,7 @@ Codex 会自动读取仓库根目录的 `AGENTS.md`，所以**不需要你把规
 | 这句话 | 防的是什么 |
 |---|---|
 | "先读 AGENTS.md / CONTEXT.md，读完先别改代码" | Agent 上来就动手，绕开合规和印刷红线 |
-| "跑单测确认 35 项全过" | 环境有问题时，后面所有结论都不可信 |
+| "跑单测确认 41 项全过" | 环境有问题时，后面所有结论都不可信 |
 | "权利声明我还没填，先给模板" | Agent 自作主张把 `commercial_use_granted` 填成 yes |
 | "资产目录里不要混进原图" | 装配层按目录收集，多一张就报"需要正好 6 张" |
 | "三处规格都要改 + 跑 TestSpecParity" | 前端说合格、后端说不合格，最后印厂说连刀了 |

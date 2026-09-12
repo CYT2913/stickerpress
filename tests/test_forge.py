@@ -10,7 +10,9 @@
 import base64
 import io
 import json
+import os
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -223,6 +225,121 @@ class TestAssemble(unittest.TestCase):
             with self.assertRaises(ValueError) as ctx:
                 assemble_sheet(self._artworks(Path(d), px=120))
             self.assertIn("dpi", str(ctx.exception))
+
+    def test_target_dpi_auto_shrinks_low_resolution_assets(self):
+        """低像素资产可通过缩小实体尺寸达到目标 dpi，不得插值放大。"""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            arts = self._artworks(d, px=500)
+            natural = assemble_sheet(arts, strict=False)
+            adjusted = assemble_sheet(arts, target_dpi=300)
+
+            self.assertLess(natural.min_effective_dpi, 300)
+            self.assertAlmostEqual(adjusted.min_effective_dpi, 300, places=6)
+            self.assertEqual(adjusted.auto_shrunk_count, 6)
+            self.assertEqual(adjusted.target_dpi, 300)
+            for before, after in zip(natural.placements, adjusted.placements):
+                self.assertLess(after.w_mm, before.w_mm)
+                self.assertLess(after.h_mm, before.h_mm)
+                self.assertEqual(after.src_px, before.src_px)
+
+            layout = adjusted.to_dict()
+            self.assertEqual(layout["target_dpi"], 300.0)
+            self.assertEqual(layout["auto_shrunk_count"], 6)
+            for placement, cell in zip(adjusted.placements, SheetSpec().cell_boxes()):
+                cx, cy, cw, ch = cell
+                self.assertAlmostEqual(placement.x_mm + placement.w_mm / 2,
+                                       cx + cw / 2, places=6)
+                self.assertAlmostEqual(placement.y_mm + placement.h_mm / 2,
+                                       cy + ch / 2, places=6)
+
+    def test_target_dpi_only_shrinks_assets_that_need_it(self):
+        """高分资产必须保持原尺寸，混合输入只缩低分项。"""
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            arts = []
+            for i, px in enumerate((900, 500, 900, 500, 900, 500), 1):
+                p = d / f"sticker_{i:02d}.png"
+                p.write_bytes(make_png(px, px))
+                arts.append(p)
+
+            natural = assemble_sheet(arts, strict=False)
+            adjusted = assemble_sheet(arts, target_dpi=300)
+
+            self.assertEqual(adjusted.auto_shrunk_count, 3)
+            self.assertGreaterEqual(adjusted.min_effective_dpi, 300)
+            for i, (before, after) in enumerate(
+                    zip(natural.placements, adjusted.placements)):
+                if i % 2 == 0:
+                    self.assertAlmostEqual(after.w_mm, before.w_mm)
+                    self.assertAlmostEqual(after.h_mm, before.h_mm)
+                else:
+                    self.assertLess(after.w_mm, before.w_mm)
+                    self.assertLess(after.h_mm, before.h_mm)
+
+    def test_target_dpi_rejects_size_below_hard_minimum(self):
+        """不能为了凑 dpi 把贴纸缩到 20mm 硬下限以下。"""
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError) as ctx:
+                assemble_sheet(self._artworks(Path(d), px=120), target_dpi=300)
+            self.assertIn("硬下限", str(ctx.exception))
+
+    def test_target_dpi_must_meet_print_minimum(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError) as ctx:
+                assemble_sheet(self._artworks(Path(d)), target_dpi=299)
+            self.assertIn("不低于印刷门槛", str(ctx.exception))
+
+    def test_target_dpi_must_be_finite(self):
+        with tempfile.TemporaryDirectory() as d:
+            arts = self._artworks(Path(d))
+            for value in (float("nan"), float("inf"), float("-inf")):
+                with self.subTest(value=value):
+                    with self.assertRaisesRegex(ValueError, "有限数"):
+                        assemble_sheet(arts, target_dpi=value)
+
+    def test_cli_target_dpi_reaches_manifest_report_and_stdout(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            photo = d / "photo.png"
+            photo.write_bytes(make_png(1200, 900))
+            artwork_dir = d / "artworks"
+            artwork_dir.mkdir()
+            arts = self._artworks(artwork_dir, px=500)
+            self.assertEqual(len(arts), 6)
+            rights = d / "rights.json"
+            rights.write_text(json.dumps(GOOD_RIGHTS), encoding="utf-8")
+            outdir = d / "outputs" / "ORDER-CLI"
+
+            proc = subprocess.run([
+                sys.executable, str(ROOT / "forge.py"), "assemble", str(photo),
+                "--artwork-dir", str(artwork_dir), "--rights", str(rights),
+                "--outdir", str(outdir), "--target-dpi", "300",
+            ], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+               env={**os.environ, "PYTHONIOENCODING": "utf-8"}, check=False)
+            stdout = proc.stdout.decode("utf-8", errors="replace")
+            stderr = proc.stderr.decode("utf-8", errors="replace")
+
+            self.assertEqual(proc.returncode, 0, stderr)
+            self.assertIn("目标 dpi : 300（自动缩小 6/6 枚）", stdout)
+            manifest = json.loads((outdir / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["layout"]["target_dpi"], 300.0)
+            self.assertEqual(manifest["layout"]["auto_shrunk_count"], 6)
+            report = (outdir / "delivery-report.md").read_text(encoding="utf-8")
+            self.assertIn("自动缩小目标", report)
+            self.assertIn("300 dpi", report)
+            self.assertIn("缩小 6/6 枚", report)
+
+            rejected_outdir = d / "outputs" / "REJECTED"
+            rejected = subprocess.run([
+                sys.executable, str(ROOT / "forge.py"), "assemble", str(photo),
+                "--artwork-dir", str(artwork_dir), "--rights", str(rights),
+                "--outdir", str(rejected_outdir), "--target-dpi", "299",
+            ], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+               env={**os.environ, "PYTHONIOENCODING": "utf-8"}, check=False)
+            self.assertEqual(rejected.returncode, 2)
+            self.assertFalse(rejected_outdir.exists(),
+                             "参数或装配校验失败时不得留下原图副本或半套交付")
 
     def test_each_bitmap_embedded_exactly_once(self):
         """每张位图只能内嵌一份。

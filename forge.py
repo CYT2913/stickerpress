@@ -90,11 +90,10 @@ def cmd_assemble(args) -> int:
     src = load_source(args.photo)
     rights = load_rights(args.rights)
 
-    outdir.mkdir(parents=True, exist_ok=True)
-    copied = copy_source(src, outdir)
-
     if not rights.ok:
         # 权利未确认：只留原图副本和一份说明拒绝原因的报告，不产出印刷文件。
+        outdir.mkdir(parents=True, exist_ok=True)
+        copied = copy_source(src, outdir)
         report = build_report(order_id, src, rights, spec,
                               source_copy_name=copied.name)
         (outdir / "delivery-report.md").write_text(report, encoding="utf-8")
@@ -107,8 +106,12 @@ def cmd_assemble(args) -> int:
     artworks = _collect_artworks(Path(args.artwork_dir))
     labels = args.labels.split(",") if args.labels else None
     result = assemble_sheet(artworks, spec=spec, order_id=order_id,
-                            source_sha256=src.sha256, labels=labels)
+                            source_sha256=src.sha256, labels=labels,
+                            target_dpi=args.target_dpi)
 
+    # 所有资产与排版校验通过后才开始落盘，失败单不留下原图副本或半套交付。
+    outdir.mkdir(parents=True, exist_ok=True)
+    copied = copy_source(src, outdir)
     svg_path = outdir / "a5-six-stickers.svg"
     svg_path.write_text(result.svg, encoding="utf-8")
 
@@ -133,6 +136,8 @@ def cmd_assemble(args) -> int:
     print(f"\n刀线净距 : {result.min_knife_gap_mm:.2f} mm")
     print(f"安全边距 : {result.min_margin_mm:.2f} mm")
     print(f"最低 dpi : {result.min_effective_dpi:.0f}")
+    if result.target_dpi is not None:
+        print(f"目标 dpi : {result.target_dpi:g}（自动缩小 {result.auto_shrunk_count}/6 枚）")
     print(f"\n自动验收 : {'全部通过' if verify.ok else '存在未通过项'}")
     for c in verify.failed:
         print(f"  [FAIL] {c.name}：{c.detail}")
@@ -172,6 +177,9 @@ def main(argv=None) -> int:
     p.add_argument("--outdir", required=True, help="交付输出目录")
     p.add_argument("--order-id", default="", help="订单号，默认取 outdir 目录名")
     p.add_argument("--labels", default="", help="六枚贴纸的中文标签，逗号分隔")
+    p.add_argument(
+        "--target-dpi", type=float,
+        help="按目标 dpi 自动缩小低像素贴纸（不得低于 300；仅缩小，不放大）")
     p.set_defaults(func=cmd_assemble)
 
     p = sub.add_parser("verify", help="独立复核已产出的 SVG")

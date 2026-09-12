@@ -70,6 +70,17 @@ effective_dpi = pixel_width / (width_mm / 25.4)
 - 低于 300 dpi 装配层会拒绝并报错；
 - 报告中记录每一枚的实际 dpi 和最低值。
 
+### 按目标 DPI 自动缩小
+
+已有贴纸像素不足、但可以接受更小实体尺寸时，可在装配层显式启用：
+
+```bash
+python3 forge.py assemble source.jpg --artwork-dir art --rights rights.json \
+  --outdir outputs/order-001 --target-dpi 300
+```
+
+算法只缩小低于目标 DPI 的贴纸并保持格位居中，不重采样、不增加像素。目标必须 ≥ 300；缩小后任一方向仍必须 ≥ 20 mm，否则拒绝。未传 `--target-dpi` 时保持原有“按格位尽量放大、低于 300 dpi 即拒绝”的行为。
+
 A5 400 dpi 全幅参考像素：`148/25.4×400 ≈ 2331`，`210/25.4×400 ≈ 3307`。若额外提供 PNG 预览，必须写明它的实际像素与 DPI，不得让印厂误以为预览就是印刷源。
 
 ---
