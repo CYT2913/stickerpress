@@ -1,8 +1,14 @@
 /**
- * 色度键抠图（与 Python 引擎 stickerpress/imaging/chroma.py 同算法）。
+ * 背景透明化（与 Python 引擎 stickerpress/imaging/chroma.py 同算法）。
  *
- * 生成模型不会输出真 alpha，要求"透明背景"时它会把棋盘格画出来。
- * 所以强制模型在纯品红 #FF00FF 上作画，这里再把背景键掉。
+ * 优先级：真 alpha > 色度键。
+ * 生成模型（含 ChatGPT 贴纸）导出的 PNG 往往自带真透明通道——查看器里那层
+ * 灰白棋格只是底衬，不在文件里。有 alpha 就直通，不做任何色度键：没有溢色
+ * 抑制、没有阈值损失，连通域切分更准。
+ *
+ * 只有拿不到 alpha 时才退回品红兜底：让模型在纯 #FF00FF 上作画，这里键掉。
+ * 注意第三种情况——模型把棋盘格"画"出来的假透明，既没有 alpha 也键不掉，
+ * 只能重出图（判别见 engine/tools/check_alpha.py）。
  */
 
 import { type Mask, connectedComponents, makeMask } from './mask';
@@ -87,10 +93,22 @@ export function chromaKey(
 
 /** 已带有效 alpha 的 PNG 直接放行，不做色度键 */
 export function hasUsableAlpha(src: ImageData): boolean {
+  return transparentRatio(src) > 0.1;
+}
+
+/**
+ * 全透明像素占比（alpha < 16）。抽样步长 7，够快也够准。
+ *
+ * 注意"有 alpha 通道"不等于"有透明像素"：ImageData 恒有第 4 通道，
+ * 所以只能靠实际透明像素比例判断，不能靠通道存在性。
+ */
+export function transparentRatio(src: ImageData): number {
   const n = src.width * src.height;
   let transparent = 0;
+  let sampled = 0;
   for (let i = 0; i < n; i += 7) {
     if (src.data[i * 4 + 3] < 16) transparent++;
+    sampled++;
   }
-  return transparent / Math.ceil(n / 7) > 0.1;
+  return sampled === 0 ? 0 : transparent / sampled;
 }

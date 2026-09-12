@@ -12,7 +12,7 @@
 .
 ├─ forge.py                 # 零依赖装配器 CLI（预检 / 权利模板 / 装配 / 验收）
 ├─ src/sticker_forge/       # 装配器实现，仅用 Python 标准库，不联网、不生图
-├─ tests/test_forge.py      # 离线单元测试（24 项）
+├─ tests/                   # 离线单元测试（35 项）
 ├─ engine/                  # 完整 Python 产线（生图 + 合规 + 抠图 + 切分 + 刀版）
 │  ├─ stickerpress/         # 主包
 │  ├─ tools/                # 策略同步、红队样本、红队回归
@@ -43,7 +43,7 @@
 ```bash
 git clone https://github.com/CYT2913/stickerpress.git
 cd stickerpress
-python3 -m unittest discover -s tests   # 自检：24 项应全过
+python3 -m unittest discover -s tests   # 自检：35 项应全过
 ```
 
 ```bash
@@ -132,7 +132,13 @@ cd console && pnpm sync:samples   # 同步示例台纸到 demo 资源
 
 详细链路、覆盖方式和额度换算见 [`docs/MODEL_AND_QUOTA.md`](docs/MODEL_AND_QUOTA.md)。
 
-**只有 ChatGPT Plus、没有 API 额度**也能跑通：在 ChatGPT 里人工出一张品红六宫格大图，再用 `--sheet` 走本地装配，全程零 API 花费。步骤和提示词模板见 [`docs/USE_WITH_CHATGPT_PLUS.md`](docs/USE_WITH_CHATGPT_PLUS.md)。
+**只有 ChatGPT Plus、没有 API 额度**也能跑通：在 ChatGPT 里人工出一张六宫格大图，再用 `--sheet` 走本地装配，全程零 API 花费。步骤和提示词模板见 [`docs/USE_WITH_CHATGPT_PLUS.md`](docs/USE_WITH_CHATGPT_PLUS.md)。
+
+大图**首选带真 alpha 的透明 PNG**（ChatGPT 贴纸导出的通常就是），拿不到 alpha 才退回品红 `#FF00FF` 底走色度键。进产线前先花 2 秒确认是真透明还是"画出来的棋盘格"假透明：
+
+```bash
+python3 engine/tools/check_alpha.py <大图路径>   # 看到「真透明」+「6 / 6 张」才算稳
+```
 
 ---
 

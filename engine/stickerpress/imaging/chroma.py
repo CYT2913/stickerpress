@@ -1,11 +1,25 @@
-"""色度键抠图（chroma key）。
+"""背景透明化：优先直接用 alpha，拿不到 alpha 时才做色度键（chroma key）。
 
-生成模型不会真的输出带 alpha 通道的 PNG——直接要求"透明背景"时，它会把
-Photoshop 那种灰白棋盘格**画**出来。所以本流水线改用色度键：强制模型在
-纯品红 #FF00FF 上作画，再由本模块把背景键掉。
+**入口是 prepare_rgba()，不要直接调 key_out()。**
 
-相比绿幕，品红在 HSV 里是一个"宠物 / 人像 / 卡通"几乎不会踩到的极端点，
-误伤率更低（绿幕会误伤植物、绿衣服、绿色彩带）。
+两条路径：
+
+1. **输入自带真 alpha** —— 现在的图像模型（含 ChatGPT 的图像生成）是可以
+   直接输出带 alpha 通道的透明 PNG 的。这种情况下什么都不用做：直接进
+   alpha 连通域切分，边缘质量比色度键更好，也没有溢色问题。这是首选路径。
+
+2. **输入没有可用 alpha** —— 退回色度键：让模型在纯品红 #FF00FF 上作画，
+   本模块把背景键掉。相比绿幕，品红在 HSV 里是"宠物 / 人像 / 卡通"几乎
+   不会踩到的极端点，误伤率更低（绿幕会误伤植物、绿衣服、绿色彩带）。
+
+色度键是**兜底**，不是首选。它存在的真正理由是第三种情况：模型把
+Photoshop 那种灰白棋盘格**当图案画出来**了——看着像透明，其实整幅不透明。
+这种"假透明"用 looks_like_painted_checkerboard() 检出，必须重新出图或
+走色度键，不能硬跑（棋盘格会被当成贴纸主体的一部分印出来）。
+
+历史注记：早期版本认定"模型不会输出真 alpha"，pipeline 无条件调用
+key_out()，导致真透明 PNG 的 alpha 被 convert("RGB") 丢掉、背景变不透明、
+6 张贴纸粘成 1 个连通域。见 CHANGELOG 2026-09-12。
 """
 
 from __future__ import annotations
@@ -23,11 +37,13 @@ from ..config import CHROMA_KEY_RGB
 @dataclass
 class KeyResult:
     rgba: Image.Image
-    #: 背景像素占比，用于判断"是不是真的按要求画在品红上"
+    #: 背景（全透明）像素占比
     background_ratio: float
-    #: 是否检测到有效的色度键背景
+    #: 背景是否可信：alpha 直通时看透明占比，色度键时看键出占比
     keyed: bool
     note: str = ""
+    #: "alpha" = 输入自带 alpha 直通；"chroma" = 做了色度键
+    mode: str = "chroma"
 
 
 def _distance_to_key(arr: np.ndarray, key: Tuple[int, int, int]) -> np.ndarray:
@@ -92,14 +108,100 @@ def key_out(
         rgba=Image.fromarray(rgba, mode="RGBA"),
         background_ratio=bg_ratio,
         keyed=bg_ratio > 0.15,
-        note=f"背景占比 {bg_ratio:.1%}",
+        note=f"色度键背景占比 {bg_ratio:.1%}",
+        mode="chroma",
     )
 
 
+#: 判定"自带 alpha 可用"的门槛：至少这么多比例的像素是全透明的。
+#: 六宫格贴纸大图的背景通常占 40%~70%，取 10% 已经很宽松。
+MIN_ALPHA_BG_RATIO = 0.10
+
+
+def alpha_stats(image: Image.Image) -> dict:
+    """统计 alpha 通道情况，供诊断与人工判断使用。"""
+    has_channel = image.mode in ("RGBA", "LA", "PA") or "transparency" in image.info
+    if not has_channel:
+        return {"has_alpha_channel": False, "transparent_ratio": 0.0,
+                "semi_ratio": 0.0, "opaque_ratio": 1.0}
+    a = np.asarray(image.convert("RGBA").getchannel("A"))
+    total = a.size
+    return {
+        "has_alpha_channel": True,
+        "transparent_ratio": float((a < 16).sum() / total),
+        "semi_ratio": float(((a >= 16) & (a < 240)).sum() / total),
+        "opaque_ratio": float((a >= 240).sum() / total),
+    }
+
+
+def has_usable_alpha(image: Image.Image,
+                     min_bg_ratio: float = MIN_ALPHA_BG_RATIO) -> bool:
+    """输入是否已经带了可用的真 alpha。"""
+    s = alpha_stats(image)
+    return bool(s["has_alpha_channel"] and s["transparent_ratio"] > min_bg_ratio)
+
+
+def looks_like_painted_checkerboard(image: Image.Image,
+                                     border_frac: float = 0.06) -> bool:
+    """启发式判断"假透明"：把 Photoshop 棋盘格当图案画出来了。
+
+    特征是画面**没有**可用 alpha，但边缘一圈是近灰色、且只在两个亮度档位之间
+    规律交替。只用于提示人工复核，不作为拦截依据——真实的灰白格纹贴纸背景
+    也可能命中。
+    """
+    if has_usable_alpha(image):
+        return False
+
+    rgb = np.asarray(image.convert("RGB"), dtype=np.int16)
+    h, w = rgb.shape[:2]
+    bw = max(4, int(min(h, w) * border_frac))
+    border = np.concatenate([
+        rgb[:bw, :, :].reshape(-1, 3), rgb[-bw:, :, :].reshape(-1, 3),
+        rgb[:, :bw, :].reshape(-1, 3), rgb[:, -bw:, :].reshape(-1, 3),
+    ])
+
+    # 1) 近灰：三通道彼此接近
+    spread = border.max(axis=1) - border.min(axis=1)
+    if float((spread <= 12).mean()) < 0.9:
+        return False
+
+    # 2) 双色阶：亮度集中在两个档位，且两档都占相当比例
+    lum = border.mean(axis=1)
+    hist, edges = np.histogram(lum, bins=32, range=(0, 255))
+    top2 = np.argsort(hist)[-2:]
+    if hist[top2].sum() / max(len(lum), 1) < 0.85:
+        return False
+    gap = abs(float(edges[top2[0]]) - float(edges[top2[1]]))
+    # 棋盘格两档灰度差通常在 15~60 之间；差太小是纯色底，差太大是黑白图案
+    return 8.0 <= gap <= 80.0
+
+
+def prepare_rgba(image: Image.Image,
+                 key_rgb: Tuple[int, int, int] = CHROMA_KEY_RGB) -> KeyResult:
+    """**统一入口**：拿到一张大图，返回可直接做 alpha 连通域切分的 RGBA。
+
+    自带真 alpha 就直通（首选），否则退回色度键（兜底）。
+
+    直通比色度键更可取：没有溢色、没有 hard/soft 阈值带来的边缘损失，
+    也不要求模型服从"必须画品红底"这条额外指令。
+    """
+    if has_usable_alpha(image):
+        s = alpha_stats(image)
+        return KeyResult(
+            rgba=image.convert("RGBA"),
+            background_ratio=s["transparent_ratio"],
+            keyed=True,
+            note=(f"输入自带 alpha，跳过色度键；透明 {s['transparent_ratio']:.1%}、"
+                  f"半透明边缘 {s['semi_ratio']:.1%}"),
+            mode="alpha",
+        )
+
+    res = key_out(image, key_rgb=key_rgb)
+    if not res.keyed and looks_like_painted_checkerboard(image):
+        res.note += "；疑似把棋盘格画成了图案（假透明），需重新出图"
+    return res
+
+
 def ensure_rgba(image: Image.Image) -> Image.Image:
-    """若图片已自带有效 alpha（用户直接上传透明 PNG），则跳过色度键。"""
-    if image.mode == "RGBA":
-        a = np.asarray(image.getchannel("A"))
-        if a.min() < 16 and (a < 16).mean() > 0.1:
-            return image
-    return key_out(image).rgba
+    """prepare_rgba 的简写，只要图不要诊断信息。"""
+    return prepare_rgba(image).rgba

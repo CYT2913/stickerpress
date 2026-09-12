@@ -2,6 +2,39 @@
 
 本文件只增不改。新条目必须写在最上方。
 
+## 2026-09-12 — 修复真透明 PNG 被色度键毁掉，品红背景降为兜底
+
+### 修复（严重）
+
+- `engine/stickerpress/pipeline.py` 原先**无条件**调用 `key_out()`，而 `key_out()` 内部 `image.convert("RGB")` 会直接丢掉输入的 alpha 通道。后果：用户拿到的真透明六宫格 PNG 进产线后背景变不透明，六枚贴纸粘成**一个**连通域，只能切出 1 张，作业失败。
+- 起因是早期假设"模型给不出真 alpha，只会把棋盘格画出来"。实测证伪：ChatGPT 贴纸导出的 PNG **确实带真 alpha**，查看器里那层灰白棋格只是底衬，不是文件内容。
+- 前端 `console/src/lib/pipeline.ts` 早已有 `hasUsableAlpha()` 分支，行为本来就是对的；这次是 Python 产线补齐，两侧对齐。
+
+### 变更
+
+- `imaging/chroma.py` 新增统一入口 `prepare_rgba()`：先检测可用 alpha，有则**直通**（`mode="alpha"`，不做任何色度键），没有才退回品红色度键（`mode="chroma"`）。真 alpha 直通没有溢色抑制与阈值损失，边缘更干净，连通域切分更准。
+- 新增 `alpha_stats()`、`has_usable_alpha()`：按**实际透明像素比例**判断，而非通道是否存在（RGBA 恒有第 4 通道，存在性不说明任何问题）。
+- 新增 `looks_like_painted_checkerboard()`：识别"画出来的棋盘格"这类假透明。这种图既没有 alpha 也键不掉，且格子会被原样印在纸上，只能重出图，因此在质检阶段就要拦住并给出明确提示。
+- `KeyResult` 新增 `mode` 字段；`pipeline` 报告新增「背景透明化方式」「背景透明像素占比」两行，保留旧字段 `chroma_background_ratio` 兼容。
+- 前端 `chroma.ts` 抽出 `transparentRatio()`，`pipeline.ts` 新增 `backgroundMode`，质检项标签按模式区分显示（`透明背景占比（alpha 直通）` / `色度键背景占比（品红兜底）`），不再对 alpha 输入显示"色度键占比 0.0%"这种误导数字。
+
+### 新增
+
+- `engine/tools/check_alpha.py`：出图后先跑它。对任意图片给出四类结论（真透明 / 假透明棋盘格 / 品红可键 / 普通不透明图）、产线实际会走哪条路、以及**能切出几枚**。看到 `6/6` 才算稳。
+- `tests/test_imaging_alpha.py`：11 条回归，含一条固化那个 bug 现场的测试（直接 `key_out()` 真透明图会切不出 6 张），防止以后有人把 pipeline 改回去。依赖 PIL/numpy/scipy，缺依赖时整体 skip，不影响装配层零依赖测试。单测总数 24 → 35。
+
+### 文档
+
+- `docs/USE_WITH_CHATGPT_PLUS.md` 提示词从"**必须**品红背景、不要透明背景"改为"**首选**直接要透明背景"，品红移到「第 1.5b 步（可选兜底）」；新增「第 1.5 步：花 2 秒确认是真透明还是假透明」。
+- `docs/ARTWORK_CONTRACT.md` 第 3 节重写为路线 A（真 alpha，首选）/ 路线 B（品红，兜底）/ 必须排除的假透明。
+- `docs/ARCHITECTURE.md` 数据流与取舍表同步；`ASSUMPTIONS.md` 旧条目标注"已部分失效"并新增 9-12 条目。
+
+### 实测
+
+- 真透明六宫格 2400×3600 → alpha 直通、透明占比 59.2%、切 6/6、最低 399.8 dpi、刀版净距 12.49 mm。
+- 同一张图合成到品红底 → 色度键、占比 59.2%、切 6/6，几何结果与上面完全一致，兜底路径无回归。
+- 假透明棋盘格 → 正确判定并拦下，切分 1/6（预期失败）。
+
 ## 2026-09-11 — 仓库改名为 stickerpress
 
 - GitHub 仓库由 `CYT2913/-` 改名为 `CYT2913/stickerpress`。原名是单个减号，`cd -` 在 shell 里表示"回到上一个目录"，clone 下来的目录名会让人和 Agent 同时踩坑（见下一条 9-11 记录）。

@@ -27,7 +27,7 @@ from .compliance import (
 from .compliance.reviewer import Reviewer
 from .config import SheetSpec, StyleSpec, get_style
 from .imaging import (
-    GenerationRequest, StickerProvider, key_out, split_sheet,
+    GenerationRequest, StickerProvider, prepare_rgba, split_sheet,
 )
 from .layout import build_sheet_svg, render_preview
 
@@ -148,9 +148,9 @@ class StickerPressPipeline:
         }
 
         # ---------- 抠图 + 切分 -------------------------------------------
-        step("色度键抠图 + 六宫格切分")
+        step("背景透明化（alpha 直通 / 色度键）+ 六宫格切分")
         raw = Image.open(gen.sheet_path)
-        keyed = key_out(raw)
+        keyed = prepare_rgba(raw)
         pieces, diag = split_sheet(keyed.rgba, expected=self.spec.slots,
                                    rows=self.spec.rows)
 
@@ -181,9 +181,8 @@ class StickerPressPipeline:
             f"切出 {len(pieces)} 张（要求 {q.required_sticker_count}）；" + "；".join(diag),
             Action.BLOCK))
         checks.append(Check(
-            "抠图有效性", keyed.keyed,
-            f"色度键背景占比 {keyed.background_ratio:.1%}"
-            + ("" if keyed.keyed else "，疑似模型未按品红背景作画"),
+            "背景透明化", keyed.keyed,
+            ("alpha 直通：" if keyed.mode == "alpha" else "色度键：") + keyed.note,
             Action.REVIEW))
         checks.append(Check(
             "有效印刷分辨率", sheet.min_effective_dpi >= q.min_effective_dpi,
@@ -235,6 +234,9 @@ class StickerPressPipeline:
             "min_knife_gap_mm": round(sheet.min_knife_gap_mm, 2),
             "min_safe_margin_mm": round(margin, 2),
             "canvas_mm": [sp.canvas_w_mm, sp.canvas_h_mm],
+            "background_mode": keyed.mode,
+            "background_ratio": round(keyed.background_ratio, 4),
+            # 兼容旧字段名，勿删：早期报告与前端按这个键读数
             "chroma_background_ratio": round(keyed.background_ratio, 4),
             "placements": [p.to_dict() for p in sheet.placements],
             "segmentation": diag,
@@ -388,7 +390,10 @@ def _render_report(result: JobResult, audit: AuditRecord, policy: Policy,
                  f"≥ {policy.quality.min_effective_dpi} dpi |")
         L.append(f"| 刀版最小净距 | {q.get('min_knife_gap_mm')} mm | "
                  f"≥ {policy.quality.min_knife_gap_mm} mm |")
-        L.append(f"| 色度键背景占比 | {q.get('chroma_background_ratio', 0):.1%} | > 15% |")
+        mode = q.get("background_mode", "chroma")
+        mode_zh = "alpha 直通（输入自带透明）" if mode == "alpha" else "色度键（品红兜底）"
+        L.append(f"| 背景透明化方式 | {mode_zh} | — |")
+        L.append(f"| 背景透明像素占比 | {q.get('background_ratio', q.get('chroma_background_ratio', 0)):.1%} | > 15% |")
         L.append("")
         L.append("**逐张明细**\n")
         L.append("| # | 标签 | 尺寸(mm) | 有效dpi | 格位占用 |")

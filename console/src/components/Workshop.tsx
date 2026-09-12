@@ -246,9 +246,10 @@ export const Workshop: FC = () => {
           <CardHeader className="pb-3">
             <CardTitle className="text-base">② 六宫格贴纸图</CardTitle>
             <CardDescription>
-              纯品红 <span className="font-mono text-fuchsia-600">#FF00FF</span>{' '}
-              色度键背景的 2×3 贴纸大图，或已带 alpha 的透明
-              PNG。由引擎侧的生成模型产出；操作台负责抠图、切分、排版与质检。
+              2×3 贴纸大图。<strong>首选带真 alpha 的透明 PNG</strong>
+              （ChatGPT 贴纸导出的通常就是）；拿不到 alpha 时，可退回纯品红{' '}
+              <span className="font-mono text-fuchsia-600">#FF00FF</span>{' '}
+              背景走色度键。操作台负责背景透明化、切分、排版与质检。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

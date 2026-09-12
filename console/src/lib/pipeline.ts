@@ -14,7 +14,7 @@ import {
   screenText,
   worstAction,
 } from './compliance/policy';
-import { chromaKey, hasUsableAlpha } from './imaging/chroma';
+import { chromaKey, hasUsableAlpha, transparentRatio } from './imaging/chroma';
 import { type StickerPiece, splitSheet } from './imaging/segment';
 import { type SheetBuildResult, buildSheetSvg } from './print/sheet';
 import { type SheetSpec, canvasH, canvasW } from './print/spec';
@@ -37,6 +37,8 @@ export interface JobResult {
   pieces: StickerPiece[];
   sheet: SheetBuildResult | null;
   diagnostics: string[];
+  /** 背景透明化方式：alpha 直通，或品红色度键兜底 */
+  backgroundMode: 'alpha' | 'chroma';
   backgroundRatio: number;
   printable: boolean;
   createdAt: string;
@@ -98,7 +100,7 @@ export interface RunOptions {
 }
 
 /**
- * 输入一张六宫格贴纸大图（品红色度键背景，或已带 alpha 的 PNG），
+ * 输入一张六宫格贴纸大图（首选已带真 alpha 的透明 PNG，其次品红色度键背景），
  * 输出 A5 印刷级台纸 + 质检结论。
  */
 export async function runSheetJob(
@@ -112,11 +114,15 @@ export async function runSheetJob(
   p('闸 2 · 文案护栏', 8);
   findings.push(...screenText(opts.subject ?? ''));
 
-  p('抠图 · 色度键', 22);
+  p('背景透明化', 22);
   let rgba = sheetImage;
   let bgRatio = 1;
+  // 优先真 alpha：ChatGPT 等导出的贴纸 PNG 通常自带透明通道，
+  // 直通比色度键干净（无溢色、无阈值损失）。拿不到 alpha 才走品红兜底。
+  let bgMode: 'alpha' | 'chroma' = 'chroma';
   if (hasUsableAlpha(sheetImage)) {
-    bgRatio = 0;
+    bgMode = 'alpha';
+    bgRatio = transparentRatio(sheetImage);
   } else {
     const keyed = chromaKey(sheetImage);
     rgba = keyed.rgba;
@@ -157,10 +163,16 @@ export async function runSheetJob(
   });
   qc.push({
     key: 'bg',
-    label: '色度键背景占比',
+    label:
+      bgMode === 'alpha'
+        ? '透明背景占比（alpha 直通）'
+        : '色度键背景占比（品红兜底）',
     value: `${(bgRatio * 100).toFixed(1)}%`,
-    ok: bgRatio === 0 || bgRatio > 0.15,
-    hint: '低于 15% 说明模型没画出纯品红底，抠图不可信',
+    ok: bgRatio > 0.15,
+    hint:
+      bgMode === 'alpha'
+        ? '输入自带 alpha，已跳过色度键；低于 15% 说明透明区域过少，可能是假透明'
+        : '低于 15% 说明模型没画出纯品红底，抠图不可信',
   });
   if (sheet) {
     qc.push({
@@ -251,6 +263,7 @@ export async function runSheetJob(
     pieces,
     sheet,
     diagnostics,
+    backgroundMode: bgMode,
     backgroundRatio: bgRatio,
     printable: verdict !== 'block' && verdict !== 'review',
     createdAt: new Date().toISOString(),
