@@ -51,7 +51,7 @@ python3 --version
 git clone https://github.com/CYT2913/stickerpress.git
 cd stickerpress
 
-# 5) 自检：应该 24 项全过
+# 5) 自检：应该 35 项全过
 python3 -m unittest discover -s tests
 ```
 
@@ -81,36 +81,49 @@ Codex 会自动读取仓库根目录的 `AGENTS.md`，所以**不需要你把规
 - docs/ARCHITECTURE.md（三层结构）
 - docs/PRINT_SPEC.md（印刷硬门槛）
 
-然后跑 `python3 -m unittest discover -s tests`，确认 24 项全过，把结果告诉我。
+然后跑 `python3 -m unittest discover -s tests`，确认 35 项全过，把结果告诉我。
 ```
 
-### 3.2 我已经在 ChatGPT 里出好六宫格大图，帮我跑一单
+### 3.2 我在 ChatGPT 里一张一张存了 6 枚贴纸（**推荐路线**）
+
+单张保存每枚都能独享导出上限，分辨率远高于六宫格整张，且完全绕开切分环节。
 
 ```
-我已经用 ChatGPT 生成了一张品红背景的六宫格贴纸大图，路径：<你的大图路径>
+我用 ChatGPT 生成了 6 枚贴纸并一张一张保存，目录：<你的贴纸目录>
 原始照片：<你的照片路径>
 
-请按 docs/USE_WITH_CHATGPT_PLUS.md 的流程跑一单：
-1. 先 `python3 forge.py preflight <照片路径>`，把 SHA-256 和格式念给我；
-2. 用 engine CLI 的 --sheet 模式喂这张大图，做抠图、切分、刀版、A5 排版；
-3. 权利声明我还没填，先用 `forge.py rights-template` 生成模板给我，我填完再继续；
-4. 最后跑 `python3 forge.py verify` 做独立验收，把 12 项结果贴给我。
+请按 docs/USE_WITH_CHATGPT_PLUS.md 第 2.5 步之后的流程跑一单：
+1. 先 `python3 engine/tools/check_alpha.py <贴纸目录>/*.png --single`，
+   逐枚确认「真透明」且 dpi 过 300，有不合格的直接告诉我别硬跑；
+2. 读 docs/ARTWORK_CONTRACT.md 核对资产契约（正好 6 个文件、命名补零、
+   资产目录不能混进原图）；
+3. `python3 forge.py preflight <照片路径>`，把 SHA-256 和格式念给我；
+4. 用 `forge.py rights-template` 生成权利声明模板给我，我填完再继续；
+5. 我填完后跑 forge.py assemble，输出到 outputs/<订单号>/；
+6. 最后 `python3 forge.py verify` 独立验收，把结果贴给我。
 
+注意：SVG 由 forge.py 生成，你不要自己写 SVG 或手改导出的 SVG。
+照片和成品都不许进 git，输出放 outputs/ 下。
+```
+
+### 3.3 我只有一张六宫格大图
+
+只在整张导出分辨率够大（≳2300×3300）时才和 3.2 等价，否则每格只有整图的 1/6，容易卡在 300 dpi 门槛下。
+
+```
+我有一张六宫格贴纸大图，路径：<你的大图路径>
+原始照片：<你的照片路径>
+
+1. 先 `python3 engine/tools/check_alpha.py <大图路径>`，告诉我三件事：
+   是真透明还是「画出来的棋盘格」假透明、dpi 够不够、能不能切出 6/6；
+   假透明或切不出 6 张就停下来告诉我，要重新出图，不要硬跑；
+2. `python3 forge.py preflight <照片路径>`，把 SHA-256 和格式念给我；
+3. 用 engine CLI 的 --sheet 模式喂这张大图，做背景透明化、切分、刀版、A5 排版；
+4. 权利声明我还没填，先用 `forge.py rights-template` 生成模板给我，我填完再继续；
+5. 最后跑 `python3 forge.py verify` 做独立验收，把 12 项结果贴给我。
+
+背景透明化优先直通真 alpha；只有拿不到 alpha 时才用品红 #FF00FF 色度键兜底。
 注意：照片和成品都不许进 git，输出放 outputs/ 下。
-```
-
-### 3.3 我已经有 6 张抠好的贴纸资产
-
-```
-我有 6 张已经抠好的透明贴纸 PNG，在 <目录路径>；原图在 <照片路径>。
-
-请先读 docs/ARTWORK_CONTRACT.md 确认我的资产符合契约（数量、真透明、分辨率、
-命名补零），有问题直接告诉我别硬跑。然后：
-1. 生成 rights.json 模板给我填；
-2. 我填完后跑 forge.py assemble，输出到 outputs/<订单号>/；
-3. 跑 forge.py verify 验收。
-
-提醒我：资产目录里不要混进原图，否则会被当成第 7 张资产。
 ```
 
 ### 3.4 改印刷规格
@@ -147,7 +160,7 @@ Codex 会自动读取仓库根目录的 `AGENTS.md`，所以**不需要你把规
 | 这句话 | 防的是什么 |
 |---|---|
 | "先读 AGENTS.md / CONTEXT.md，读完先别改代码" | Agent 上来就动手，绕开合规和印刷红线 |
-| "跑单测确认 24 项全过" | 环境有问题时，后面所有结论都不可信 |
+| "跑单测确认 35 项全过" | 环境有问题时，后面所有结论都不可信 |
 | "权利声明我还没填，先给模板" | Agent 自作主张把 `commercial_use_granted` 填成 yes |
 | "资产目录里不要混进原图" | 装配层按目录收集，多一张就报"需要正好 6 张" |
 | "三处规格都要改 + 跑 TestSpecParity" | 前端说合格、后端说不合格，最后印厂说连刀了 |
